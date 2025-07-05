@@ -28,3 +28,6 @@ frontend/mobile/node_modules/
 
 #Langgraph
 .langgraph_api
+
+# 自己看的
+README-local.md
