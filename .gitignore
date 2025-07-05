@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+
+# IDE
+.idea/
+.vscode/
+
+# 环境
+.env
+env.example
+
+# 数据
+postgres_data/
+redis_data/
+minio_data/
+
+# Docker
+*.log
+*.pid
+
+# 前端
+frontend/web/node_modules/
+frontend/mobile/node_modules/
+
+#Langgraph
+.langgraph_api

@@ -1,0 +1,99 @@
+version: '3.8'
+
+services:
+  # 主应用服务
+  dietai-backend:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DIETAI_DATABASE_URL=postgresql://dietai:dietai123@postgres:5432/dietai_db
+      - DIETAI_REDIS_HOST=redis
+      - DIETAI_REDIS_PORT=6379
+      - DIETAI_MINIO_ENDPOINT=minio:9000
+      - DIETAI_MINIO_ACCESS_KEY=minioadmin
+      - DIETAI_MINIO_SECRET_KEY=minioadmin
+      - DIETAI_MINIO_SECURE=false
+      - DIETAI_DEBUG=true
+    depends_on:
+      - postgres
+      - redis
+      - minio
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - dietai-network
+    restart: unless-stopped
+
+  # PostgreSQL数据库
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: dietai_db
+      POSTGRES_USER: dietai
+      POSTGRES_PASSWORD: dietai123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/docker/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - dietai-network
+    restart: unless-stopped
+
+  # Redis缓存
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - dietai-network
+    restart: unless-stopped
+
+  # MinIO对象存储
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - dietai-network
+    restart: unless-stopped
+
+  # Nginx反向代理（可选）
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./infrastructure/nginx/ssl:/etc/nginx/ssl
+    depends_on:
+      - dietai-backend
+    networks:
+      - dietai-network
+    restart: unless-stopped
+    profiles:
+      - production
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  minio_data:
+    driver: local
+
+networks:
+  dietai-network:
+    driver: bridge
