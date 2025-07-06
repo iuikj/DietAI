@@ -25,7 +25,7 @@ class UserCreate(BaseModel):
     email: EmailStr = Field(..., description="邮箱")
     password: str = Field(..., min_length=8, description="密码")
     phone: Optional[str] = Field(None, max_length=20, description="手机号")
-    
+
     @validator('password')
     def validate_password(cls, v):
         if len(v) < 8:
@@ -49,7 +49,7 @@ class UserResponse(BaseModel):
     status: int
     created_at: datetime
     last_login_at: Optional[datetime]
-    
+
     class Config:
         from_attributes = True
 
@@ -101,7 +101,7 @@ class UserProfileResponse(BaseModel):
     region: Optional[str]
     created_at: datetime
     updated_at: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -124,7 +124,7 @@ class HealthGoalResponse(BaseModel):
     current_status: int
     created_at: datetime
     updated_at: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -150,7 +150,7 @@ class DiseaseResponse(BaseModel):
     is_current: bool
     notes: Optional[str]
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -173,7 +173,7 @@ class AllergyResponse(BaseModel):
     severity_level: Optional[int]
     reaction_description: Optional[str]
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -201,7 +201,7 @@ class WeightRecordResponse(BaseModel):
     notes: Optional[str]
     device_type: Optional[str]
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -230,7 +230,7 @@ class FoodRecordResponse(BaseModel):
     analysis_status: int
     created_at: datetime
     updated_at: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -279,7 +279,7 @@ class NutritionDetailResponse(BaseModel):
     analysis_method: Optional[str]
     created_at: datetime
     updated_at: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -302,7 +302,7 @@ class DailyNutritionSummaryResponse(BaseModel):
     health_score: Optional[float]
     created_at: datetime
     updated_at: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -312,6 +312,7 @@ class ConversationSessionCreate(BaseModel):
     """对话会话创建模型"""
     session_type: int = Field(1, ge=1, le=4, description="会话类型：1营养咨询2健康评估3食物识别4运动建议")
     title: Optional[str] = Field(None, max_length=200, description="会话标题")
+
 
 class ConversationCreate(BaseModel):
     """对话创建模型"""
@@ -328,7 +329,7 @@ class ConversationResponse(BaseModel):
     status: int
     created_at: datetime
     updated_at: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -338,6 +339,7 @@ class ConversationMessageCreate(BaseModel):
     content: str = Field(..., description="消息内容")
     message_type: int = Field(..., ge=1, le=3, description="消息类型：1用户消息2助手消息3系统消息")
     message_metadata: Optional[Dict[str, Any]] = Field(None, description="消息元数据")
+
 
 class MessageCreate(BaseModel):
     """消息创建模型"""
@@ -355,7 +357,7 @@ class MessageResponse(BaseModel):
     sender_type: int
     message_metadata: Optional[Dict[str, Any]]
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -406,8 +408,8 @@ class DateRangeParams(BaseModel):
 class NutritionTrendParams(DateRangeParams):
     """营养趋势参数模型"""
     metrics: Optional[List[str]] = Field(None, description="指标列表")
-    
-    
+
+
 # 枚举类型
 class GenderEnum(IntEnum):
     """性别枚举"""
@@ -440,4 +442,42 @@ class GoalTypeEnum(IntEnum):
     GAIN_WEIGHT = 2
     MAINTAIN_WEIGHT = 3
     GAIN_MUSCLE = 4
-    LOSE_FAT = 5 
+    LOSE_FAT = 5
+
+# =============与Agent进行通信的数据模型=============
+
+# ----------和营养成分分析Agent通信的数据模型----------
+class Macronutrients(BaseModel):
+    protein: float
+    fat: float
+    carbohydrates: float
+
+
+class VitaminsMinerals(BaseModel):
+    vitamin_a: str
+    vitamin_c: str
+    calcium: str
+    iron: str
+
+
+class NutritionFacts(BaseModel):
+    food_items: List[str]
+    total_calories: float
+    macronutrients: Macronutrients
+    vitamins_minerals: VitaminsMinerals
+    health_score: int
+
+
+class Recommendations(BaseModel):
+    recommendations: List[str]
+    dietary_tips: List[str]
+    warnings: List[str]
+    alternative_foods: List[str]
+
+
+class AgentAnalysisData(BaseModel):
+    image_description: str
+    nutrition_facts: NutritionFacts
+    recommendations: Recommendations
+
+

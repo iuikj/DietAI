@@ -3,13 +3,16 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 from typing import List, Optional
 from datetime import datetime, date, timedelta
+import base64
+import json
+from langgraph_sdk import get_client
 
 from shared.models.database import get_db
 from shared.models.schemas import (
     BaseResponse, FoodRecordCreate, FoodRecordResponse,
     NutritionDetailCreate, NutritionDetailResponse,
     DailyNutritionSummaryResponse, DateRangeParams,
-    PaginationParams, FileUploadResponse
+    PaginationParams, FileUploadResponse, AgentAnalysisData, NutritionFacts, Recommendations
 )
 from shared.utils.auth import get_current_user
 from shared.models.user_models import User
@@ -22,12 +25,13 @@ router = APIRouter(prefix="/foods", tags=["食物记录"])
 
 @router.post("/records", response_model=BaseResponse)
 async def create_food_record(
-    food_data: FoodRecordCreate,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+        food_data: FoodRecordCreate,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db)
 ):
-    """创建食物记录"""
+    """创建食物记录并使用Agent分析图片"""
     try:
+        # 创建食物记录
         food_record = FoodRecord(
             user_id=current_user.id,
             record_date=food_data.record_date,
@@ -38,31 +42,74 @@ async def create_food_record(
             recording_method=food_data.recording_method or 1,
             analysis_status=1  # 待分析
         )
-        
+
         db.add(food_record)
         db.commit()
         db.refresh(food_record)
-        
+
+        # 如果有图片URL，则使用Agent进行分析
+        analysis_result = None
+        if food_data.image_url:
+            try:
+                # 设置分析状态为处理中
+                food_record.analysis_status = 2  # 分析中
+                db.commit()
+
+                # 使用Agent分析图片
+                analysis_result: AgentAnalysisData = await analyze_food_image_with_agent(food_data.image_url,
+                                                                                         current_user)
+
+                # 如果有营养分析结果，创建营养详情记录
+                if analysis_result:
+                    await create_nutrition_detail_from_analysis(
+                        food_record.id,
+                        analysis_result.nutrition_facts,
+                        db
+                    )
+
+                    # 更新分析状态为完成
+                    food_record.analysis_status = 3  # 已完成
+
+                    # 触发每日营养汇总更新
+                    await update_daily_nutrition_summary(current_user.id, food_data.record_date, db)
+                else:
+                    # 如果分析失败，设置为待分析
+                    food_record.analysis_status = 1  # 待分析
+
+                db.commit()
+
+            except Exception as e:
+                # 分析出错，设置为待分析状态
+                food_record.analysis_status = 1  # 待分析
+                db.commit()
+                print(f"Agent分析失败: {str(e)}")
+                # 不抛出异常，继续返回记录创建成功的响应
+
         # 清除相关缓存
         cache_key = f"nutrition:daily:{current_user.id}:{food_data.record_date}"
         cache_service.redis.delete(cache_key)
-        
+
+        # 构建响应数据
+        response_data = {
+            "id": food_record.id,
+            "user_id": food_record.user_id,
+            "record_date": food_record.record_date.isoformat(),
+            "meal_type": food_record.meal_type,
+            "food_name": food_record.food_name,
+            "description": food_record.description,
+            "image_url": food_record.image_url,
+            "recording_method": food_record.recording_method,
+            "analysis_status": food_record.analysis_status,
+            "created_at": food_record.created_at.isoformat(),
+            "analysis_result": analysis_result  # 包含Agent分析结果
+        }
+
         return BaseResponse(
             success=True,
-            message="食物记录创建成功",
-            data={
-                "id": food_record.id,
-                "user_id": food_record.user_id,
-                "record_date": food_record.record_date.isoformat(),
-                "meal_type": food_record.meal_type,
-                "food_name": food_record.food_name,
-                "description": food_record.description,
-                "image_url": food_record.image_url,
-                "recording_method": food_record.recording_method,
-                "analysis_status": food_record.analysis_status,
-                "created_at": food_record.created_at.isoformat()
-            }
+            message="食物记录创建成功" + ("，图片分析已完成" if analysis_result else ""),
+            data=response_data
         )
+
     except Exception as e:
         db.rollback()
         raise HTTPException(
@@ -71,34 +118,207 @@ async def create_food_record(
         )
 
 
+async def analyze_food_image_with_agent(image_url: str, current_user: User) -> AgentAnalysisData:
+    """使用Langgraph Agent分析食物图片"""
+    try:
+        # 初始化Langgraph客户端
+        # TODO:之后使用setting来传递这种参数配置
+        client = get_client(url="http://127.0.0.1:2024")
+
+        # 从MinIO获取图片数据并转换为base64
+        image_base64 = await get_image_base64_from_url(image_url)
+
+        # 构建用户偏好设置（可以从用户配置中获取）
+        user_prefs = {
+            "dietary_restrictions": [],  # 可以从用户配置获取
+            "health_goals": [],  # 可以从用户配置获取
+            "language": "zh-CN"  # 中文
+        }
+
+        # 创建营养师Agent
+        assistant = await client.assistants.create(
+            graph_id="nutrition_agent",
+            config={
+                "configurable": {
+                    "vision_model_provider": "openai",
+                    "vision_model": "gpt-4.1-nano-2025-04-14",
+                    "analysis_model_provider": "openai",
+                    "analysis_model": "o3-mini-2025-01-31"
+                }
+            }
+        )
+
+        # 创建线程
+        thread = await client.threads.create()
+
+        # 启动分析
+        run = await client.runs.create(
+            assistant_id=assistant["assistant_id"],
+            thread_id=thread['thread_id'],
+            input={
+                "image_data": image_base64,
+                "user_preferences": user_prefs
+            }
+        )
+
+        print("Agent分析中...")
+
+        # 等待分析完成
+        while True:
+            result = await client.threads.get_state(thread["thread_id"])
+            current_step = result.get('values', {}).get("current_step")
+            # print(f"当前步骤: {current_step}")
+
+            if result.get('values', {}).get("error_message") is not None:
+                error_msg = result.get('values', {}).get("error_message")
+                print(f"Agent分析错误: {error_msg}")
+                raise Exception(f"Agent分析错误: {error_msg}")
+
+            if current_step == "completed":
+                print("Agent分析完成")
+                break
+
+        # 获取分析结果
+        result_values = result.get("values", {})
+
+        # 格式化返回结果
+        analysis_result = {
+            "success": True,
+            "analysis": {
+                "image_description": result_values.get("image_analysis"),
+                "nutrition_facts": result_values.get("nutrition_analysis"),
+                "recommendations": result_values.get("nutrition_advice")
+            },
+            "processing_step": result_values.get("current_step")
+        }
+        print(analysis_result)
+        analysis_result = AgentAnalysisData(
+            image_description=result_values.get("image_analysis"),
+            nutrition_facts=NutritionFacts(
+                **result_values.get("nutrition_analysis")
+            ),
+            recommendations=Recommendations(
+                **result_values.get("nutrition_advice")
+            )
+        )
+        return analysis_result
+
+    except Exception as e:
+        print(f"Agent分析失败: {str(e)}")
+        raise e
+
+
+async def get_image_base64_from_url(image_identifier: str) -> str:
+    """从图片标识符获取base64编码的图片数据"""
+    try:
+        # 判断是URL还是对象名
+        if image_identifier.startswith('http'):
+            # 如果是完整的URL，需要正确提取对象名
+            from urllib.parse import urlparse, unquote
+
+            parsed_url = urlparse(image_identifier)
+            # 获取路径部分并移除bucket名称
+            path_parts = parsed_url.path.strip('/').split('/')
+            if len(path_parts) >= 2:
+                # 移除bucket名称，保留对象路径
+                object_name = '/'.join(path_parts[1:])
+            else:
+                # 如果路径格式不正确，尝试从最后一部分提取
+                object_name = path_parts[-1] if path_parts else parsed_url.path.split('/')[-1]
+
+            # URL解码
+            object_name = unquote(object_name)
+        else:
+            # 如果是对象名或路径，直接使用
+            object_name = image_identifier
+
+        print(f"尝试获取对象: {object_name}")
+
+        # 获取图片数据
+        image_data = minio_client.download_file(object_name)
+
+        if image_data is None:
+            raise Exception(f"无法从MinIO获取图片数据: {object_name}")
+
+        # 转换为base64
+        image_base64 = base64.b64encode(image_data).decode('utf-8')
+
+        return image_base64
+
+    except Exception as e:
+        print(f"获取图片数据失败: {str(e)}")
+        raise e
+
+
+async def create_nutrition_detail_from_analysis(food_record_id: int, nutrition_facts: NutritionFacts, db: Session):
+    """根据Agent分析结果创建营养详情记录"""
+    try:
+        # 检查是否已有营养详情
+        existing_detail = db.query(NutritionDetail).filter(
+            NutritionDetail.food_record_id == food_record_id
+        ).first()
+
+        if existing_detail:
+            return  # 如果已存在，则不创建
+
+        # 从分析结果中提取营养信息
+        nutrition_detail = NutritionDetail(
+            food_record_id=food_record_id,
+            calories=nutrition_facts.total_calories or 0,
+            protein=nutrition_facts.macronutrients.protein or 0,
+            fat=nutrition_facts.macronutrients.fat or 0,
+            carbohydrates=nutrition_facts.macronutrients.carbohydrates or 0,
+            dietary_fiber=0,  #TODO:Agent忘写膳食纤维了(下面同理)
+            sugar=0,
+            sodium=0,
+            cholesterol=0,
+            # vitamin_a=nutrition_facts.vitamins_minerals.vitamin_a or 0,
+            # vitamin_c=nutrition_facts.vitamins_minerals.vitamin_c or 0,
+            # vitamin_d=0,
+            # calcium=nutrition_facts.vitamins_minerals.calcium or 0,
+            # iron=0,
+            # potassium=0,
+            # confidence_score=0,
+            analysis_method="agent_analysis"
+        )
+
+        db.add(nutrition_detail)
+        db.commit()
+
+    except Exception as e:
+        print(f"创建营养详情失败: {str(e)}")
+        raise e
+
+
 @router.get("/records", response_model=BaseResponse)
 async def get_food_records(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-    start_date: Optional[date] = Query(None, description="开始日期"),
-    end_date: Optional[date] = Query(None, description="结束日期"),
-    meal_type: Optional[int] = Query(None, description="餐次类型"),
-    page: int = Query(1, ge=1, description="页码"),
-    page_size: int = Query(20, ge=1, le=100, description="每页大小")
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+        start_date: Optional[date] = Query(None, description="开始日期"),
+        end_date: Optional[date] = Query(None, description="结束日期"),
+        meal_type: Optional[int] = Query(None, description="餐次类型"),
+        page: int = Query(1, ge=1, description="页码"),
+        page_size: int = Query(20, ge=1, le=100, description="每页大小")
 ):
     """获取食物记录列表"""
     try:
         query = db.query(FoodRecord).filter(FoodRecord.user_id == current_user.id)
-        
+
         if start_date:
             query = query.filter(FoodRecord.record_date >= start_date)
         if end_date:
             query = query.filter(FoodRecord.record_date <= end_date)
         if meal_type:
             query = query.filter(FoodRecord.meal_type == meal_type)
-        
+
         # 总数统计
         total = query.count()
-        
+
         # 分页查询
         offset = (page - 1) * page_size
-        records = query.order_by(FoodRecord.record_date.desc(), FoodRecord.created_at.desc()).offset(offset).limit(page_size).all()
-        
+        records = query.order_by(FoodRecord.record_date.desc(), FoodRecord.created_at.desc()).offset(offset).limit(
+            page_size).all()
+
         records_data = []
         for record in records:
             records_data.append({
@@ -114,14 +334,14 @@ async def get_food_records(
                 "created_at": record.created_at.isoformat(),
                 "updated_at": record.updated_at.isoformat()
             })
-        
+
         pagination_info = {
             "total": total,
             "page": page,
             "page_size": page_size,
             "total_pages": (total + page_size - 1) // page_size
         }
-        
+
         return BaseResponse(
             success=True,
             message="获取食物记录列表成功",
@@ -139,9 +359,9 @@ async def get_food_records(
 
 @router.get("/records/{record_id}", response_model=BaseResponse)
 async def get_food_record(
-    record_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+        record_id: int,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db)
 ):
     """获取食物记录详情"""
     try:
@@ -149,18 +369,18 @@ async def get_food_record(
             FoodRecord.id == record_id,
             FoodRecord.user_id == current_user.id
         ).first()
-        
+
         if not record:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="食物记录不存在"
             )
-        
+
         # 获取营养详情
         nutrition_detail = db.query(NutritionDetail).filter(
             NutritionDetail.food_record_id == record_id
         ).first()
-        
+
         record_data = {
             "id": record.id,
             "user_id": record.user_id,
@@ -175,7 +395,7 @@ async def get_food_record(
             "updated_at": record.updated_at.isoformat(),
             "nutrition_detail": None
         }
-        
+
         if nutrition_detail:
             record_data["nutrition_detail"] = {
                 "id": nutrition_detail.id,
@@ -193,10 +413,11 @@ async def get_food_record(
                 "calcium": float(nutrition_detail.calcium),
                 "iron": float(nutrition_detail.iron),
                 "potassium": float(nutrition_detail.potassium),
-                "confidence_score": float(nutrition_detail.confidence_score) if nutrition_detail.confidence_score else None,
+                "confidence_score": float(
+                    nutrition_detail.confidence_score) if nutrition_detail.confidence_score else None,
                 "analysis_method": nutrition_detail.analysis_method
             }
-        
+
         return BaseResponse(
             success=True,
             message="获取食物记录详情成功",
@@ -213,10 +434,10 @@ async def get_food_record(
 
 @router.post("/records/{record_id}/nutrition", response_model=BaseResponse)
 async def add_nutrition_detail(
-    record_id: int,
-    nutrition_data: NutritionDetailCreate,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+        record_id: int,
+        nutrition_data: NutritionDetailCreate,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db)
 ):
     """添加营养详情"""
     try:
@@ -225,24 +446,24 @@ async def add_nutrition_detail(
             FoodRecord.id == record_id,
             FoodRecord.user_id == current_user.id
         ).first()
-        
+
         if not record:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="食物记录不存在"
             )
-        
+
         # 检查是否已有营养详情
         existing_detail = db.query(NutritionDetail).filter(
             NutritionDetail.food_record_id == record_id
         ).first()
-        
+
         if existing_detail:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="该食物记录已有营养详情"
             )
-        
+
         # 创建营养详情
         nutrition_detail = NutritionDetail(
             food_record_id=record_id,
@@ -263,23 +484,23 @@ async def add_nutrition_detail(
             confidence_score=nutrition_data.confidence_score,
             analysis_method=nutrition_data.analysis_method
         )
-        
+
         db.add(nutrition_detail)
-        
+
         # 更新食物记录的分析状态
         record.analysis_status = 3  # 已完成
         record.updated_at = datetime.utcnow()
-        
+
         db.commit()
         db.refresh(nutrition_detail)
-        
+
         # 触发每日营养汇总更新
         await update_daily_nutrition_summary(current_user.id, record.record_date, db)
-        
+
         # 清除相关缓存
         cache_key = f"nutrition:daily:{current_user.id}:{record.record_date}"
         cache_service.redis.delete(cache_key)
-        
+
         return BaseResponse(
             success=True,
             message="营养详情添加成功",
@@ -294,7 +515,8 @@ async def add_nutrition_detail(
                 "sugar": float(nutrition_detail.sugar),
                 "sodium": float(nutrition_detail.sodium),
                 "cholesterol": float(nutrition_detail.cholesterol),
-                "confidence_score": float(nutrition_detail.confidence_score) if nutrition_detail.confidence_score else None,
+                "confidence_score": float(
+                    nutrition_detail.confidence_score) if nutrition_detail.confidence_score else None,
                 "analysis_method": nutrition_detail.analysis_method,
                 "created_at": nutrition_detail.created_at.isoformat()
             }
@@ -311,9 +533,9 @@ async def add_nutrition_detail(
 
 @router.get("/daily-summary/{summary_date}", response_model=BaseResponse)
 async def get_daily_nutrition_summary(
-    summary_date: date,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+        summary_date: date,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db)
 ):
     """获取每日营养汇总"""
     try:
@@ -325,17 +547,17 @@ async def get_daily_nutrition_summary(
                 message="获取每日营养汇总成功",
                 data=cached_summary
             )
-        
+
         # 从数据库获取
         summary = db.query(DailyNutritionSummary).filter(
             DailyNutritionSummary.user_id == current_user.id,
             DailyNutritionSummary.summary_date == summary_date
         ).first()
-        
+
         if not summary:
             # 如果没有汇总，生成一个
             summary = await create_daily_nutrition_summary(current_user.id, summary_date, db)
-        
+
         summary_data = {
             "id": summary.id,
             "user_id": summary.user_id,
@@ -353,10 +575,10 @@ async def get_daily_nutrition_summary(
             "created_at": summary.created_at.isoformat(),
             "updated_at": summary.updated_at.isoformat()
         }
-        
+
         # 缓存汇总数据
         cache_service.cache_daily_nutrition(current_user.id, summary_date.isoformat(), summary_data)
-        
+
         return BaseResponse(
             success=True,
             message="获取每日营养汇总成功",
@@ -371,11 +593,11 @@ async def get_daily_nutrition_summary(
 
 @router.get("/nutrition-trends", response_model=BaseResponse)
 async def get_nutrition_trends(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-    start_date: Optional[date] = Query(None, description="开始日期"),
-    end_date: Optional[date] = Query(None, description="结束日期"),
-    metrics: Optional[str] = Query("calories,protein,fat,carbohydrates", description="指标列表，逗号分隔")
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+        start_date: Optional[date] = Query(None, description="开始日期"),
+        end_date: Optional[date] = Query(None, description="结束日期"),
+        metrics: Optional[str] = Query("calories,protein,fat,carbohydrates", description="指标列表，逗号分隔")
 ):
     """获取营养趋势"""
     try:
@@ -384,17 +606,17 @@ async def get_nutrition_trends(
             end_date = date.today()
         if not start_date:
             start_date = end_date - timedelta(days=30)
-        
+
         # 获取营养汇总数据
         summaries = db.query(DailyNutritionSummary).filter(
             DailyNutritionSummary.user_id == current_user.id,
             DailyNutritionSummary.summary_date >= start_date,
             DailyNutritionSummary.summary_date <= end_date
         ).order_by(DailyNutritionSummary.summary_date).all()
-        
+
         # 解析指标列表
         metric_list = [metric.strip() for metric in metrics.split(',')]
-        
+
         trends_data = {
             "date_range": {
                 "start_date": start_date.isoformat(),
@@ -403,13 +625,13 @@ async def get_nutrition_trends(
             "metrics": metric_list,
             "data": []
         }
-        
+
         for summary in summaries:
             data_point = {
                 "date": summary.summary_date.isoformat(),
                 "values": {}
             }
-            
+
             for metric in metric_list:
                 if metric == "calories":
                     data_point["values"]["calories"] = float(summary.total_calories)
@@ -425,9 +647,9 @@ async def get_nutrition_trends(
                     data_point["values"]["sodium"] = float(summary.total_sodium)
                 elif metric == "health_score":
                     data_point["values"]["health_score"] = float(summary.health_score) if summary.health_score else None
-            
+
             trends_data["data"].append(data_point)
-        
+
         return BaseResponse(
             success=True,
             message="获取营养趋势成功",
@@ -442,8 +664,8 @@ async def get_nutrition_trends(
 
 @router.post("/upload-image", response_model=BaseResponse)
 async def upload_food_image(
-    file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user)
+        file: UploadFile = File(...),
+        current_user: User = Depends(get_current_user)
 ):
     """上传食物图片"""
     try:
@@ -454,7 +676,7 @@ async def upload_food_image(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="不支持的文件类型，请上传JPEG、PNG或GIF格式的图片"
             )
-        
+
         # 验证文件大小（10MB限制）
         file_content = await file.read()
         if len(file_content) > 10 * 1024 * 1024:
@@ -462,7 +684,7 @@ async def upload_food_image(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="文件大小不能超过10MB"
             )
-        
+
         # 生成文件名
         timestamp = int(datetime.utcnow().timestamp())
         file_extension = file.filename.split('.')[-1] if '.' in file.filename else 'jpg'
@@ -487,6 +709,7 @@ async def upload_food_image(
                 "file_id": object_name,
                 "file_name": file.filename,
                 "file_url": file_url,
+                "object_name": object_name,  # 用于存储到数据库
                 "file_size": len(file_content),
                 "content_type": file.content_type,
                 "upload_time": datetime.utcnow().isoformat()
@@ -498,6 +721,58 @@ async def upload_food_image(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"图片上传失败: {str(e)}"
+        )
+
+
+@router.get("/images/url", response_model=BaseResponse)
+async def get_image_url(
+        object_name: str = Query(..., description="对象名称"),
+        current_user: User = Depends(get_current_user),
+        expires_minutes: int = Query(60, ge=1, le=10080, description="URL有效期(分钟)")
+):
+    """获取图片的访问URL"""
+    try:
+        # 验证对象名格式（确保是该用户的图片）
+        if not object_name.startswith(f"food_images/{current_user.id}/"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="无权访问该图片"
+            )
+
+        # 检查文件是否存在
+        if not minio_client.file_exists(object_name):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="图片不存在"
+            )
+
+        # 生成预签名URL
+        from datetime import timedelta
+        expires = timedelta(minutes=expires_minutes)
+        file_url = minio_client.get_file_url(object_name, expires)
+
+        if not file_url:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="生成图片URL失败"
+            )
+
+        return BaseResponse(
+            success=True,
+            message="获取图片URL成功",
+            data={
+                "object_name": object_name,
+                "file_url": file_url,
+                "expires_in": expires_minutes * 60,  # 转换为秒
+                "expires_at": (datetime.utcnow() + expires).isoformat()
+            }
+        )
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取图片URL失败: {str(e)}"
         )
 
 
@@ -519,7 +794,7 @@ async def create_daily_nutrition_summary(user_id: int, summary_date: date, db: S
         FoodRecord.user_id == user_id,
         FoodRecord.record_date == summary_date
     ).first()
-    
+
     summary = DailyNutritionSummary(
         user_id=user_id,
         summary_date=summary_date,
@@ -534,11 +809,11 @@ async def create_daily_nutrition_summary(user_id: int, summary_date: date, db: S
         exercise_calories=0,  # 默认值，后续可以从运动记录获取
         health_score=None  # 后续计算健康评分
     )
-    
+
     db.add(summary)
     db.commit()
     db.refresh(summary)
-    
+
     return summary
 
 
@@ -559,20 +834,20 @@ async def update_daily_nutrition_summary(user_id: int, summary_date: date, db: S
         FoodRecord.user_id == user_id,
         FoodRecord.record_date == summary_date
     ).first()
-    
+
     # 获取或创建汇总记录
     summary = db.query(DailyNutritionSummary).filter(
         DailyNutritionSummary.user_id == user_id,
         DailyNutritionSummary.summary_date == summary_date
     ).first()
-    
+
     if not summary:
         summary = DailyNutritionSummary(
             user_id=user_id,
             summary_date=summary_date
         )
         db.add(summary)
-    
+
     # 更新统计数据
     summary.total_calories = nutrition_stats.total_calories or 0
     summary.total_protein = nutrition_stats.total_protein or 0
@@ -582,9 +857,9 @@ async def update_daily_nutrition_summary(user_id: int, summary_date: date, db: S
     summary.total_sodium = nutrition_stats.total_sodium or 0
     summary.meal_count = nutrition_stats.meal_count or 0
     summary.updated_at = datetime.utcnow()
-    
+
     db.commit()
-    
+
     # 清除相关缓存
     cache_key = f"nutrition:daily:{user_id}:{summary_date}"
-    cache_service.redis.delete(cache_key) 
+    cache_service.redis.delete(cache_key)
