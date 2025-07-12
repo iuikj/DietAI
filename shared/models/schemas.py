@@ -392,7 +392,7 @@ class MessageResponse(BaseModel):
 # 健康分析模型
 class HealthAnalysisRequest(BaseModel):
     """健康分析请求模型"""
-    analysis_type: str = Field(..., description="分析类型：bmr,tdee,nutrition_balance,health_score")
+    analysis_type: str = Field(..., description="分析类型：bmr,tdee,nutrition_balance,health_level")
     date_range: Optional[Dict[str, str]] = Field(None, description="日期范围")
     parameters: Optional[Dict[str, Any]] = Field(None, description="额外参数")
 
@@ -471,20 +471,46 @@ class GoalTypeEnum(IntEnum):
     GAIN_MUSCLE = 4
     LOSE_FAT = 5
 
+
 # =============与Agent进行通信的数据模型=============
 
 # ----------和营养成分分析Agent通信的数据模型----------
 class Macronutrients(BaseModel):
-    protein: float
-    fat: float
-    carbohydrates: float
+    # protein: float
+    # fat: float
+    # carbohydrates: float
+    # dietary_fiber: float  # 膳食纤维 (克)
+    """营养大分子模型"""
+    protein: float = Field(..., ge=0, description="蛋白质(g)")
+    fat: float = Field(..., ge=0, description="脂肪(g)")
+    carbohydrates: float = Field(..., ge=0, description="碳水化合物(g)")
+    dietary_fiber: float = Field(..., ge=0, description="膳食纤维(g)")
+    sugar: float = Field(..., ge=0, description="糖(g)")
 
 
 class VitaminsMinerals(BaseModel):
-    vitamin_a: str
-    vitamin_c: str
-    calcium: str
-    iron: str
+    # vitamin_a: str
+    # vitamin_c: str
+    # calcium: str
+    # iron: str
+    """维生素和矿物质模型"""
+    vitamin_a: float = Field(..., ge=0, description="维生素A(μg)")
+    vitamin_c: float = Field(..., ge=0, description="维生素C(mg)")
+    vitamin_d: float = Field(..., ge=0, description="维生素D(μg)")
+    calcium: float = Field(..., ge=0, description="钙(mg)")
+    iron: float = Field(..., ge=0, description="铁(mg)")
+    sodium: float = Field(..., ge=0, description="钠(mg)")
+    potassium: float = Field(..., ge=0, description="钾(mg)")
+    cholesterol: float = Field(..., ge=0, description="胆固醇(mg)")
+
+
+class HealthLevelEnum(IntEnum):
+    """健康等级枚举"""
+    E = 1  # 很差
+    D = 2  # 较差
+    C = 3  # 一般
+    B = 4  # 良好
+    A = 5  # 最优
 
 
 class NutritionFacts(BaseModel):
@@ -492,7 +518,8 @@ class NutritionFacts(BaseModel):
     total_calories: float
     macronutrients: Macronutrients
     vitamins_minerals: VitaminsMinerals
-    health_score: int
+    # health_level: str  # 更改为健康等级 (A, B, C, D, E)
+    health_level: HealthLevelEnum = Field(..., description="健康等级：A最优，B良好，C一般，D较差，E很差")
 
 
 class Recommendations(BaseModel):
@@ -509,3 +536,17 @@ class AgentAnalysisData(BaseModel):
     recommendations: Optional[Recommendations]
 
 
+class AdviceDependencies(BaseModel):
+    """营养建议依据结构"""
+    nutrition_facts: List[str] = Field(
+        default_factory=list,
+        description="相关营养知识要点"
+    )
+    health_guidelines: List[str] = Field(
+        default_factory=list,
+        description="健康指南建议"
+    )
+    food_interactions: List[str] = Field(
+        default_factory=list,
+        description="食物之间的相互作用"
+    )

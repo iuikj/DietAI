@@ -134,10 +134,10 @@ cd DietAI
 #### 2. 配置环境变量
 ```bash
 # 复制环境变量模板
-cp env.example .env
+cp env.example .env.dev
 
 # 编辑环境变量文件
-nano .env
+nano .env.dev
 ```
 
 #### 3. 使用Docker Compose启动（推荐）

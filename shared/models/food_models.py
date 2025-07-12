@@ -93,7 +93,7 @@ class DailyNutritionSummary(Base):
     exercise_calories = Column(Numeric(6, 2), default=0)  # 运动消耗(kcal)
     
     # 健康评分
-    health_score = Column(Numeric(3, 2), nullable=True)
+    health_level = Column(Numeric(3, 2), nullable=True)
     
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
@@ -136,4 +136,4 @@ class FoodDatabase(Base):
     __table_args__ = (
         Index('idx_food_database_name', 'food_name'),
         Index('idx_food_database_category', 'category'),
-    ) 
+    )

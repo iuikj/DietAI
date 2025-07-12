@@ -15,8 +15,8 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", description="日志级别")
 
     # 服务器配置
-    # 使用0.0.0.0允许来自其他设备的连接（如真机测试）
-    host: str = Field(default="0.0.0.0", description="服务器主机")
+    # host: str = Field(default="0.0.0.0", description="服务器主机")
+    host: str = Field(default="localhost", description="服务器主机")
     port: int = Field(default=8000, description="服务器端口")
     reload: bool = Field(default=False, description="热重载")
 
@@ -30,14 +30,20 @@ class Settings(BaseSettings):
     # Redis配置
     redis_host: str = Field(default="localhost", description="Redis主机")
     redis_port: int = Field(default=6379, description="Redis端口")
-    redis_password: Optional[str] = Field(default="2168", description="Redis密码")
+    redis_password: Optional[str] = Field(default="123456", description="Redis密码")
     redis_db: int = Field(default=5, description="Redis数据库")
     redis_url: str = Field(default="redis://localhost:6379/0", description="Redis连接URL")
 
+    # Vector store 配置
+    VECTOR_STORE_PATH: str = Field(default="agent/VectorStore", description="向量存储持久化目录")
+    VECTOR_COLLECTION_NAME: str = Field(default="vector_collection_for_agent", description="向量集合名")
+    # 暂时不需要，后期可添加 EMBEDDINGS_MODEL: str = Field(default="OpenAIEmbeddings()", description="使用的 Embeddings 模型")
+    DOC_PATH: str = Field(default="./docs", description="文件路径")
+
     # MinIO配置
-    minio_endpoint: str = Field(default="localhost:9000", description="MinIO端点")
-    minio_access_key: str = Field(default="minioadmin", description="MinIO访问密钥")
-    minio_secret_key: str = Field(default="minioadmin", description="MinIO秘密密钥")
+    minio_endpoint: str = Field(default="localhost:9090", description="MinIO端点")
+    minio_access_key: str = Field(default="admin", description="MinIO访问密钥")
+    minio_secret_key: str = Field(default="admin123456", description="MinIO秘密密钥")
     minio_secure: bool = Field(default=False, description="是否使用HTTPS")
     minio_bucket: str = Field(default="dietai-bucket", description="MinIO存储桶")
 
@@ -54,11 +60,11 @@ class Settings(BaseSettings):
     password_min_length: int = Field(default=8, description="密码最小长度")
     password_hash_rounds: int = Field(default=12, description="密码哈希轮次")
 
-    # CORS配置  
+    # CORS配置
     cors_origins: List[str] = Field(
         default=[
-            "http://localhost:3000", 
-            "http://localhost:8080", 
+            "http://localhost:3000",
+            "http://localhost:8080",
             "http://127.0.0.1:3000",
             "http://localhost:19006",  # Expo Web默认端口
             "http://127.0.0.1:19006",
@@ -102,7 +108,7 @@ class Settings(BaseSettings):
 
     # AI服务配置（预留）
     ai_service_enabled: bool = Field(default=False, description="是否启用AI服务")
-    ai_service_url: str = Field(default=" http://127.0.0.1:2024", description="AI服务URL")
+    ai_service_url: str = Field(default="http://127.0.0.1:2024", description="AI服务URL")
     ai_service_timeout: int = Field(default=30, description="AI服务超时时间(秒)")
 
     # 健康检查配置
@@ -146,7 +152,7 @@ class Settings(BaseSettings):
         return v
 
     class Config:
-        env_file = ".env"
+        env_file = ".env.dev"
         env_file_encoding = "utf-8"
         env_prefix = "DIETAI_"
         case_sensitive = False
