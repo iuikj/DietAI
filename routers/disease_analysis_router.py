@@ -52,14 +52,13 @@ async def create_allergy(
     allergy_obj = get_or_create_allergy(db, current_user.id, allergy.dict())
     return BaseResponse(success=True, message="过敏原信息录入成功", data={"allergy_id": allergy_obj.id}, timestamp=datetime.now())
 
-# 3. 疾病分析接口（支持自然语言和结构化两种模式）
+# 3. 疾病分析接口（结构化分析模式）
 @router.post("/analyze", response_model=BaseResponse)
 async def analyze_disease(
-    user_input: Optional[str] = Body(None, description="用户自然语言输入"),
-    food_record_id: Optional[int] = Body(None),
-    nutrition_detail_id: Optional[int] = Body(None),
-    disease_id: Optional[int] = Body(None),
-    allergy_id: Optional[int] = Body(None),
+    food_record_id: int = Body(..., description="食物记录ID"),
+    nutrition_detail_id: int = Body(..., description="营养详情ID"),
+    disease_id: int = Body(..., description="疾病ID"),
+    allergy_id: Optional[int] = Body(None, description="过敏原ID（可选）"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -77,64 +76,34 @@ async def analyze_disease(
             }
         )
         thread = await client.threads.create()
-        # --- 模式A：自然语言输入 ---
-        if user_input:
-            input_data = {"user_input": user_input}
-            run = await client.runs.create(
-                assistant_id=assistant["assistant_id"],
-                thread_id=thread['thread_id'],
-                input=input_data
-            )
-            while True:
-                result = await client.threads.get_state(thread["thread_id"])
-                current_step = result.get('values', {}).get("current_step")
-                if result.get('values', {}).get("error_message") is not None:
-                    error_msg = result.get('values', {}).get("error_message")
-                    raise HTTPException(status_code=500, detail=error_msg)
-                if current_step == "extracted_disease_allergy":
-                    break
-            result_values = result.get("values", {})
-            # 自动写入疾病和过敏原表
-            disease_obj = None
-            allergy_obj = None
-            if result_values.get("disease"):
-                disease_obj = get_or_create_disease(db, current_user.id, result_values["disease"])
-            if result_values.get("allergen"):
-                allergy_obj = get_or_create_allergy(db, current_user.id, result_values["allergen"])
-            return BaseResponse(
-                success=True,
-                message="已提取疾病和过敏原信息并录入数据库",
-                data={
-                    "disease": result_values.get("disease"),
-                    "allergen": result_values.get("allergen"),
-                    "disease_id": disease_obj.id if disease_obj else None,
-                    "allergy_id": allergy_obj.id if allergy_obj else None
-                },
-                timestamp=datetime.now()
-            )
-        # --- 模式B：结构化分析 ---
+        
         # 查表组装agent输入
-        food_record = db.query(FoodRecord).get(food_record_id) if food_record_id else None
-        nutrition_detail = db.query(NutritionDetail).get(nutrition_detail_id) if nutrition_detail_id else None
-        disease = db.query(Disease).get(disease_id) if disease_id else None
+        food_record = db.query(FoodRecord).get(food_record_id)
+        nutrition_detail = db.query(NutritionDetail).get(nutrition_detail_id)
+        disease = db.query(Disease).get(disease_id)
         allergy = db.query(Allergy).get(allergy_id) if allergy_id else None
+        
         if not (food_record and nutrition_detail and disease):
             raise HTTPException(status_code=400, detail="缺少必要的分析输入（食物记录、营养详情、疾病）")
+        
         input_data = {
             "foodrecord": food_record.to_dict() if hasattr(food_record, 'to_dict') else dict(food_record.__dict__),
             "nutritiondetail": nutrition_detail.to_dict() if hasattr(nutrition_detail, 'to_dict') else dict(nutrition_detail.__dict__),
             "disease": disease.to_dict() if hasattr(disease, 'to_dict') else dict(disease.__dict__),
             "allergen": allergy.to_dict() if allergy else None
         }
+        
         # 去除SQLAlchemy私有字段
         for k in list(input_data.keys()):
             if isinstance(input_data[k], dict):
                 input_data[k].pop('_sa_instance_state', None)
+        
         run = await client.runs.create(
             assistant_id=assistant["assistant_id"],
             thread_id=thread['thread_id'],
             input=input_data
         )
+        
         while True:
             result = await client.threads.get_state(thread["thread_id"])
             current_step = result.get('values', {}).get("current_step")
@@ -143,7 +112,9 @@ async def analyze_disease(
                 raise HTTPException(status_code=500, detail=error_msg)
             if current_step == "completed":
                 break
+        
         result_values = result.get("values", {})
+        
         # 写入分析结果表
         analysis_obj = DiseaseAnalysisResult(
             user_id=current_user.id,
@@ -160,6 +131,7 @@ async def analyze_disease(
         db.add(analysis_obj)
         db.commit()
         db.refresh(analysis_obj)
+        
         return BaseResponse(
             success=True,
             message="疾病分析完成，结果已存储",

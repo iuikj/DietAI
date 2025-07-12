@@ -56,7 +56,7 @@ class DiseaseRiskAnalysis(BaseModel):
     # 疾病分析结构
     disease: str = Field(..., description="疾病名称，例如高血压、糖尿病")
     allergen: Optional[str] = Field(
-        None, description="相关过敏原名称（如有），例如花生、牛奶"
+        ..., description="相关过敏原名称（如有），例如花生、牛奶"
     )
     risky_nutrients: List[str] = Field(
         ..., description="该疾病患者需要注意的营养成分，例如钠、胆固醇"
