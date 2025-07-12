@@ -1,0 +1,85 @@
+{
+  "project_name": "healthy_diet_ai_frontend",
+  "description": "A modern, cross-platform Flutter frontend optimized for AI-based food analysis with clean, responsive UI.",
+  "platforms": ["iOS", "Android", "Web"],
+  "architecture": "Modular Flutter Packages",
+  "frameworks": {
+    "frontend": "Flutter SDK",
+    "state_management": "Riverpod",
+    "animation": "Flutter animation framework",
+    "routing": "go_router"
+  },
+  "ui_library": {
+    "custom_theme": true,
+    "theme_mode_support": true,
+    "dark_mode": true,
+    "base_style": "Soft pastel, modern, round corners",
+    "font_family": "Inter via google_fonts",
+    "component_style_system": {
+      "type": "Custom tokens",
+      "colors": "Tailwind-inspired palette",
+      "spacing": "8/16/24 system",
+      "border_radius": "12-24px for cards"
+    }
+  },
+  "state_management": {
+    "library": "flutter_riverpod",
+    "features": [
+      "Global state store",
+      "Async state support",
+      "Persistence with shared_preferences or hive"
+    ]
+  },
+  "camera_integration": {
+    "plugin": "camera",
+    "features": [
+      "Live preview",
+      "Permissions handling (via permission_handler)",
+      "Photo capture and upload",
+      "Platform support: iOS/Android"
+    ]
+  },
+  "fonts": {
+    "library": "google_fonts",
+    "default_font": "Inter",
+    "integration": "theme and TextStyle override"
+  },
+  "data_visualization": {
+    "libraries": [
+      "fl_chart"
+    ],
+    "use_cases": [
+      "Weight tracking line chart",
+      "Nutrient intake pie chart"
+    ]
+  },
+  "styling": {
+    "method": "ThemeData + custom tokens",
+    "dark_mode": true,
+    "preferred_theme_style": "Soft pastel with modern UI design"
+  },
+  "language": "Dart (null safety)",
+  "package_manager": "Flutter pub",
+  "testing": {
+    "enabled": true,
+    "libraries": [
+      "flutter_test",
+      "mockito",
+      "golden_toolkit"
+    ]
+  },
+  "deployment": {
+    "mobile": "flutter build apk / ios",
+    "web": "flutter build web (host on Vercel or Firebase)"
+  },
+  "folder_structure_recommendation": {
+    "lib/main.dart": "App entry point",
+    "lib/screens/": "Page-level UI (e.g., camera, home, dashboard)",
+    "lib/widgets/": "Reusable UI components",
+    "lib/services/": "Camera, API, auth logic",
+    "lib/providers/": "Riverpod state providers",
+    "lib/themes/": "Theme data and custom tokens",
+    "lib/utils/": "Helpers and constants",
+    "assets/fonts/": "Inter and other font files if needed"
+  }
+}

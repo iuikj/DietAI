@@ -1,7 +1,8 @@
 {
   "dependencies": ["."],
   "graphs": {
-    "nutrition_agent": "./agent/agent.py:graph"
+    "nutrition_agent": "./agent/agent.py:graph",
+    "chat_agent": "./agent/chat_agent.py:chat_graph"
   },
   "env": ".env"
 }

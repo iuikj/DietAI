@@ -84,6 +84,32 @@ class UserProfileUpdate(BaseModel):
     activity_level: Optional[int] = Field(None, ge=1, le=5, description="活动级别1-5")
     occupation: Optional[str] = Field(None, max_length=100, description="职业")
     region: Optional[str] = Field(None, max_length=100, description="地区")
+    dietary_preferences: Optional[List[str]] = Field(None, description="饮食偏好")
+    food_dislikes: Optional[List[str]] = Field(None, description="不喜欢的食物")
+    wake_up_time: Optional[str] = Field(None, description="起床时间")
+    sleep_time: Optional[str] = Field(None, description="睡觉时间")
+    meal_times: Optional[Dict[str, str]] = Field(None, description="用餐时间")
+    health_status: Optional[int] = Field(None, ge=1, le=3, description="健康状态1-3")
+    onboarding_step: Optional[int] = Field(None, ge=0, description="引导步骤")
+    onboarding_completed: Optional[bool] = Field(None, description="引导完成状态")
+
+
+class OnboardingStepUpdate(BaseModel):
+    """引导步骤更新模型"""
+    step: int = Field(..., ge=0, le=10, description="当前步骤")
+    data: Optional[Dict[str, Any]] = Field(None, description="步骤数据")
+    completed: Optional[bool] = Field(None, description="是否完成")
+
+
+class OnboardingDataRequest(BaseModel):
+    """引导数据请求模型"""
+    basic_info: Optional[Dict[str, Any]] = Field(None, description="基本信息")
+    physical_data: Optional[Dict[str, Any]] = Field(None, description="身体数据")
+    health_goals: Optional[List[Dict[str, Any]]] = Field(None, description="健康目标")
+    dietary_preferences: Optional[List[str]] = Field(None, description="饮食偏好")
+    medical_conditions: Optional[List[Dict[str, Any]]] = Field(None, description="疾病信息")
+    allergies: Optional[List[Dict[str, Any]]] = Field(None, description="过敏信息")
+    lifestyle_habits: Optional[Dict[str, Any]] = Field(None, description="生活习惯")
 
 
 class UserProfileResponse(BaseModel):
@@ -320,6 +346,7 @@ class ConversationCreate(BaseModel):
     context: Optional[Dict[str, Any]] = Field(None, description="上下文信息")
 
 
+
 class ConversationResponse(BaseModel):
     """对话响应模型"""
     id: int
@@ -476,8 +503,9 @@ class Recommendations(BaseModel):
 
 
 class AgentAnalysisData(BaseModel):
-    image_description: str
-    nutrition_facts: NutritionFacts
-    recommendations: Recommendations
+    current_step: str
+    image_description: Optional[str]
+    nutrition_facts: Optional[NutritionFacts]
+    recommendations: Optional[Recommendations]
 
 

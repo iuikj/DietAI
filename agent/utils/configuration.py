@@ -18,9 +18,9 @@ class AnalysisModel(Enum):
 
 @dataclass(kw_only=True)
 class Configuration:
-    vision_model_provider: VisionModel = VisionModel.QWEN
+    vision_model_provider: VisionModel = VisionModel.OPENAI
     vision_model: str = "qwen-vl-max"
-    analysis_model_provider: AnalysisModel = AnalysisModel.QWEN
+    analysis_model_provider: AnalysisModel = AnalysisModel.OPENAI
     analysis_model: str = "qwen3-32b"
 
     @classmethod

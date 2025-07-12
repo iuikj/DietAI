@@ -1,0 +1,89 @@
+name: dietai_flutter
+description: DietAI - AI-powered diet and nutrition tracking app
+
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: ">=3.10.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # 状态管理
+  flutter_riverpod: ^2.4.9
+  riverpod_annotation: ^2.3.3
+  
+  # 路由导航
+  go_router: ^14.0.2
+  
+  # HTTP网络请求
+  dio: ^5.4.0
+  pretty_dio_logger: ^1.3.1
+  http_parser: ^4.0.2
+  
+  # 本地存储
+  shared_preferences: ^2.2.2
+  flutter_secure_storage: ^9.0.0
+  
+  # 相机和图片
+  camera: ^0.10.5+7
+  image_picker: ^1.0.4
+  image: ^4.1.3
+  
+  # UI组件
+  google_fonts: ^6.1.0
+  lucide_icons: ^0.257.0
+  animations: ^2.0.8
+  lottie: ^3.0.0
+  
+  # 数据可视化
+  fl_chart: ^0.66.0
+  
+  # 权限管理
+  permission_handler: ^11.1.0
+  
+  # 文件操作
+  path_provider: ^2.1.1
+  
+  # JSON序列化
+  json_annotation: ^4.8.1
+  
+  # 其他工具
+  intl: ^0.19.0
+  cached_network_image: ^3.3.0
+  
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  
+  # 代码生成
+  build_runner: ^2.4.7
+  riverpod_generator: ^2.3.9
+  json_serializable: ^6.7.1
+  
+  # 代码检查
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - assets/images/
+    - assets/icons/
+    - assets/lottie/
+  
+  # 字体使用 Google Fonts，无需本地字体文件
+  # fonts:
+  #   - family: Inter
+  #     fonts:
+  #       - asset: assets/fonts/Inter-Regular.ttf
+  #       - asset: assets/fonts/Inter-Medium.ttf
+  #         weight: 500
+  #       - asset: assets/fonts/Inter-SemiBold.ttf
+  #         weight: 600
+  #       - asset: assets/fonts/Inter-Bold.ttf
+  #         weight: 700 

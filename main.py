@@ -19,7 +19,8 @@ from routers.auth_router import router as auth_router
 from routers.user_router import router as user_router
 from routers.food_router import router as food_router
 from routers.health_router import router as health_router
-from routers.conversation_router import router as conversation_router
+from routers.chat_router import router as chat_router
+from routers.analysis_chat_router import router as analysis_chat_router
 
 settings = get_settings()
 
@@ -212,7 +213,8 @@ app.include_router(auth_router, prefix="/api", tags=["认证"])
 app.include_router(user_router, prefix="/api", tags=["用户"])
 app.include_router(food_router, prefix="/api", tags=["食物"])
 app.include_router(health_router, prefix="/api", tags=["健康"])
-app.include_router(conversation_router, prefix="/api", tags=["对话"])
+app.include_router(chat_router, prefix="/api", tags=["AI对话"])
+app.include_router(analysis_chat_router, prefix="/api", tags=["分析页面聊天"])
 
 # 启动服务器
 if __name__ == "__main__":

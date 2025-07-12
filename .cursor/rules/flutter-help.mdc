@@ -1,0 +1,139 @@
+---
+description: >
+  Natural Clean Health UI Design System for Flutter.
+  Applies soft, health-oriented aesthetics across card-based layout, color palette, typography, component shapes, and iconography.
+  This rule provides best practices and stylistic consistency for mobile-first Flutter projects.
+globs:
+  - "**/*.dart"
+alwaysApply: false
+---
+
+/// Flutter Design System: Natural Clean Health UI
+
+/// Layout Guidelines
+const layoutGuidelines = {
+  "type": "CardBasedLayout",
+  "padding": "16px",
+  "margin": "16px",
+  "gridColumns": 2,
+  "cardGap": "12px",
+  "alignment": {
+    "text": "start",
+    "image": "center"
+  }
+};
+
+/// Typography Guidelines
+const typographyGuidelines = {
+  "fontFamily": "Inter",
+  "fallbackFonts": ["SF Pro", "Noto Sans SC"],
+  "headerStyle": {
+    "fontWeight": "600",
+    "fontSizeRange": "20-24px",
+    "color": "#222222"
+  },
+  "bodyStyle": {
+    "fontWeight": "400",
+    "fontSizeRange": "14-16px",
+    "color": "#666666"
+  },
+  "textCase": "sentence"
+};
+
+/// Color System
+const colorPalette = {
+  "background": "#FFFFFF",
+  "primary": "#2BAF74",
+  "primaryVariant": "#A6E3C1",
+  "secondary": "#E6FAF0",
+  "accent": ["#2BAF74", "#A6E3C1", "#DEF5E9"],
+  "textPrimary": "#222222",
+  "textSecondary": "#666666",
+  "buttonColor": "#2BAF74",
+  "cardBackground": "#FFFFFF",
+  "badgeHighlight": "#55C89F",
+  "neutralPalette": true
+};
+
+/// Shape & Elevation
+const shapeSystem = {
+  "borderRadius": {
+    "default": "16px",
+    "card": "20px",
+    "button": "50px"
+  },
+  "cardElevation": "4dp",
+  "iconContainerShape": "circle",
+  "shadow": {
+    "color": "#000000",
+    "opacity": 0.08,
+    "blurRadius": 8
+  }
+};
+
+/// UI Component Specifications
+const componentSpecs = {
+  "searchBar": {
+    "shape": "rounded",
+    "borderColor": "#CCCCCC",
+    "iconColor": "#2BAF74"
+  },
+  "tabs": {
+    "style": "capsule",
+    "activeColor": "#2BAF74",
+    "inactiveColor": "#CCCCCC"
+  },
+  "card": {
+    "layout": "imageTop",
+    "elements": ["title", "detail", "buttonOrIcon"]
+  },
+  "bottomNav": {
+    "style": "sticky",
+    "items": 4,
+    "activeIconColor": "#2BAF74"
+  },
+  "button": {
+    "style": "filled",
+    "color": "#2BAF74",
+    "textColor": "#FFFFFF",
+    "hoverEffect": "scale",
+    "pressFeedback": "ripple"
+  }
+};
+
+/// Animation Rules
+const animationSpec = {
+  "pageTransitions": ["fade", "slide"],
+  "cardAppear": "fade",
+  "interactionFeedback": ["ripple", "scale"]
+};
+
+/// Iconography
+const iconSystem = {
+  "style": "lineOrTwoTone",
+  "defaultColor": "#2BAF74",
+  "inactiveColor": "#888888",
+  "placement": {
+    "action": "topRight",
+    "navigation": "bottom"
+  },
+  "library": {
+    "preferred": "Lucide",
+    "alternatives": ["Tabler", "Phosphor", "Heroicons"],
+    "flutterIntegration": {
+      "package": "lucide_icons",
+      "svgSupport": true
+    },
+    "usageContext": ["nutrition", "food", "body", "camera", "user", "chart", "settings"]
+  }
+};
+
+/// Device Responsiveness
+const deviceTargeting = {
+  "platform": "mobileFirst",
+  "safeAreaSupport": true,
+  "responsive": true
+};
+
+/// Tone & Brand Identity
+const visualTone = "clean, healthy, calm, fresh";

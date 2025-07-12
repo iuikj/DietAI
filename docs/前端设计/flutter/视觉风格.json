@@ -1,0 +1,122 @@
+{
+  "flutter_ui_style_profile": {
+    "name": "Natural Clean Health UI",
+    "layout": {
+      "type": "CardBasedLayout",
+      "spacing": {
+        "padding": "16px",
+        "margin": "16px",
+        "card_gap": "12px"
+      },
+      "grid": {
+        "columns": 2,
+        "full_width_views": true
+      },
+      "alignment": {
+        "text": "start",
+        "image": "center"
+      }
+    },
+    "typography": {
+      "font_family": "Inter",
+      "fallback_fonts": ["SF Pro", "Noto Sans SC"],
+      "header_style": {
+        "font_weight": "600",
+        "font_size": "20-24",
+        "color": "#222222"
+      },
+      "body_style": {
+        "font_weight": "400",
+        "font_size": "14-16",
+        "color": "#666666"
+      },
+      "text_case": "sentence"
+    },
+    "colors": {
+      "background": "#FFFFFF",
+      "primary": "#2BAF74",
+      "primary_variant": "#A6E3C1",
+      "secondary": "#E6FAF0",
+      "accent": ["#2BAF74", "#A6E3C1", "#DEF5E9"],
+      "text_primary": "#222222",
+      "text_secondary": "#666666",
+      "button_color": "#2BAF74",
+      "card_background": "#FFFFFF",
+      "badge_highlight": "#55C89F",
+      "neutral_palette": true
+    },
+    "shapes": {
+      "border_radius": {
+        "default": "16px",
+        "card": "20px",
+        "button": "50px"
+      },
+      "card_elevation": "4dp",
+      "icon_container_shape": "circle",
+      "shadow": {
+        "color": "#000000",
+        "opacity": 0.08,
+        "blur_radius": 8
+      }
+    },
+    "components": {
+      "search_bar": {
+        "shape": "rounded",
+        "border_color": "#CCCCCC",
+        "icon_color": "#2BAF74"
+      },
+      "tabs": {
+        "style": "capsule",
+        "active_color": "#2BAF74",
+        "inactive_color": "#CCCCCC"
+      },
+      "card": {
+        "layout": "image_top",
+        "elements": ["title", "detail", "button_or_icon"]
+      },
+      "bottom_nav": {
+        "style": "sticky",
+        "items": 4,
+        "active_icon_color": "#2BAF74"
+      },
+      "button": {
+        "style": "filled",
+        "color": "#2BAF74",
+        "text_color": "#FFFFFF",
+        "hover_effect": "scale",
+        "press_feedback": "ripple"
+      }
+    },
+    "animations": {
+      "page_transition": ["fade", "slide"],
+      "card_appearance": "fade",
+      "interaction_feedback": ["ripple", "scale"]
+    },
+    "iconography": {
+      "style": "line_or_two_tone",
+      "default_color": "#2BAF74",
+      "inactive_color": "#888888",
+      "placement": {
+        "action_icon": "top_right",
+        "bottom_nav": "bottom"
+      }
+    },
+    "icon_library": {
+      "preferred": "Lucide",
+      "alternatives": ["Tabler", "Phosphor", "Heroicons"],
+      "stroke_width": "consistent",
+      "style": "rounded, modern, minimal",
+      "use_cases": ["nutrition", "food", "body", "camera", "user", "chart", "settings"],
+      "flutter_integration": {
+        "package": "lucide_icons",
+        "type": "flutter_svg compatible"
+      }
+    },
+    "device_target": {
+      "platform": "mobile_first",
+      "safe_area_support": true,
+      "responsive_design": true
+    },
+    "tone": "clean, healthy, calm, fresh"
+  }
+}

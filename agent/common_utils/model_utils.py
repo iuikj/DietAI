@@ -14,10 +14,7 @@ from langchain_qwq import ChatQwQ, ChatQwen
 from agent.utils.configuration import *
 @lru_cache(maxsize=4)
 def get_model(model_provider: Enum, model_name: str):
-    env = os.getenv("ENV", "dev")  # 默认测试环境
-    load_dotenv(f"../../.env.dev.{env}", override=True)
-    print(f"环境变量加载+++++++++++++++++++{os.getenv("DEEPSEEK_API_KEY")}")
-
+    load_dotenv(f"../../.env", override=True)
     match model_provider:
         # case "groq":
         #     return ChatGroq(model_name=model_name)

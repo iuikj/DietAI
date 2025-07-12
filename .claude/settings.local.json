@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(find:*)",
+      "Bash(alembic revision:*)",
+      "Bash(flutter analyze:*)",
+      "Bash(timeout:*)",
+      "Bash(cd:*)",
+      "Bash(grep:*)",
+      "Bash(flutter packages pub run build_runner build:*)",
+      "Bash(dart run build_runner build:*)",
+      "Bash(dart analyze:*)",
+      "Bash(rg:*)",
+      "mcp__context7__resolve-library-id",
+      "WebFetch(domain:langchain-ai.github.io)"
+    ],
+    "deny": []
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "zen"
+  ]
+}

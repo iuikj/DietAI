@@ -15,8 +15,8 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", description="日志级别")
 
     # 服务器配置
-    # host: str = Field(default="0.0.0.0", description="服务器主机")
-    host: str = Field(default="localhost", description="服务器主机")
+    # 使用0.0.0.0允许来自其他设备的连接（如真机测试）
+    host: str = Field(default="0.0.0.0", description="服务器主机")
     port: int = Field(default=8000, description="服务器端口")
     reload: bool = Field(default=False, description="热重载")
 
@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     # Redis配置
     redis_host: str = Field(default="localhost", description="Redis主机")
     redis_port: int = Field(default=6379, description="Redis端口")
-    redis_password: Optional[str] = Field(default=2168, description="Redis密码")
+    redis_password: Optional[str] = Field(default="2168", description="Redis密码")
     redis_db: int = Field(default=5, description="Redis数据库")
     redis_url: str = Field(default="redis://localhost:6379/0", description="Redis连接URL")
 
@@ -54,9 +54,21 @@ class Settings(BaseSettings):
     password_min_length: int = Field(default=8, description="密码最小长度")
     password_hash_rounds: int = Field(default=12, description="密码哈希轮次")
 
-    # CORS配置
+    # CORS配置  
     cors_origins: List[str] = Field(
-        default=["http://localhost:3000", "http://localhost:8080", "http://127.0.0.1:3000"],
+        default=[
+            "http://localhost:3000", 
+            "http://localhost:8080", 
+            "http://127.0.0.1:3000",
+            "http://localhost:19006",  # Expo Web默认端口
+            "http://127.0.0.1:19006",
+            "http://localhost:8081",   # Expo开发服务器端口
+            "http://127.0.0.1:8081",
+            "exp://10.20.132.173:8081",  # 手机Expo客户端
+            "http://10.20.132.173:8081", # 手机Web访问
+            "http://10.20.132.173:8000", # 手机直接访问后端
+            "*"  # 开发阶段允许所有源（生产环境需要限制）
+        ],
         description="允许的CORS源"
     )
     cors_methods: List[str] = Field(
