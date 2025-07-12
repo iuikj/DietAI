@@ -1,8 +1,9 @@
 from langgraph.graph import StateGraph, END
 
-from agent.utils.configuration import Configuration
-from agent.utils.nodes import *
-from agent.utils.states import AgentState, InputState
+from agent.food_analysis_agent.utils.configuration import Configuration
+from agent.food_analysis_agent.utils.nodes import state_init, analyze_image, extract_nutrition_info, \
+    generate_nutrition_advice, format_final_response
+from agent.food_analysis_agent.utils.states import AgentState, InputState
 
 workflow = StateGraph(
     state_schema=AgentState,

@@ -1,17 +1,17 @@
 
 
 import os
+from enum import Enum
 from functools import lru_cache
 
 from dotenv import load_dotenv
 from langchain.chat_models import init_chat_model
 from langchain_anthropic import ChatAnthropic
-from langchain_community.chat_models import ChatTongyi
 
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from langchain_qwq import ChatQwQ, ChatQwen
+from langchain_openai import ChatOpenAI
+from langchain_qwq import ChatQwen
 
-from agent.utils.configuration import *
+
 @lru_cache(maxsize=4)
 def get_model(model_provider: Enum, model_name: str):
     env = os.getenv("ENV", "dev")  # 默认测试环境

@@ -30,14 +30,14 @@ class Settings(BaseSettings):
     # Redis配置
     redis_host: str = Field(default="localhost", description="Redis主机")
     redis_port: int = Field(default=6379, description="Redis端口")
-    redis_password: Optional[str] = Field(default=2168, description="Redis密码")
+    redis_password: Optional[str] = Field(default="", description="Redis密码")
     redis_db: int = Field(default=5, description="Redis数据库")
     redis_url: str = Field(default="redis://localhost:6379/0", description="Redis连接URL")
 
     # MinIO配置
-    minio_endpoint: str = Field(default="localhost:9000", description="MinIO端点")
-    minio_access_key: str = Field(default="minioadmin", description="MinIO访问密钥")
-    minio_secret_key: str = Field(default="minioadmin", description="MinIO秘密密钥")
+    minio_endpoint: str = Field(default="localhost:9005", description="MinIO端点")
+    minio_access_key: str = Field(default="admin", description="MinIO访问密钥")
+    minio_secret_key: str = Field(default="admin123456", description="MinIO秘密密钥")
     minio_secure: bool = Field(default=False, description="是否使用HTTPS")
     minio_bucket: str = Field(default="dietai-bucket", description="MinIO存储桶")
 

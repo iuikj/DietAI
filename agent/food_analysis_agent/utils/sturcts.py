@@ -32,3 +32,4 @@ class NutritionAdvice(BaseModel):
     dietary_tips: List[str] = Field(description="饮食建议")
     warnings: List[str] = Field(description="注意事项")
     alternative_foods: List[str] = Field(description="推荐替代食物")
+

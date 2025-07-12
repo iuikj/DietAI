@@ -1,13 +1,15 @@
+from functools import lru_cache
+
+from langchain_community.vectorstores import Chroma
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
-from langchain_qwq import ChatQwen
+from langchain_openai import OpenAIEmbeddings
 
 from agent.common_utils.image_utils import encode_image_to_base64
-from agent.utils.configuration import Configuration
-from agent.utils.states import AgentState
-from agent.utils.sturcts import NutritionAnalysis, NutritionAdvice
+from agent.food_analysis_agent.utils.configuration import Configuration
+from agent.food_analysis_agent.utils.states import AgentState
+from agent.food_analysis_agent.utils.sturcts import NutritionAnalysis, NutritionAdvice
 from agent.common_utils.model_utils import get_model
-
 
 def state_init(state: AgentState, config: RunnableConfig):
     configurable = Configuration.from_runnable_config(config)
@@ -113,11 +115,11 @@ def extract_nutrition_info(state: AgentState) -> AgentState:
                 "carbohydrates": 碳水化合物含量(克)
             }},
             "vitamins_minerals": {{
-                "vitamin_c": "维生素C含量评估",
+                "vitamin_c": "维生素C含量评估(毫克)",
                 "calcium": "钙含量评估",
                 "iron": "铁含量评估"
             }},
-            "health_score": 健康评分(1-10)
+            "health_score": 健康评分(abcd)
         }}
         """
 

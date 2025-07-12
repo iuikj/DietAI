@@ -3,7 +3,7 @@ from typing import Dict, List, Optional, TypedDict
 
 from langchain_openai.chat_models.base import BaseChatOpenAI
 
-from agent.utils.sturcts import NutritionAnalysis, NutritionAdvice
+from agent.food_analysis_agent.utils.sturcts import NutritionAnalysis, NutritionAdvice
 
 
 class AgentState(TypedDict):
@@ -19,7 +19,10 @@ class AgentState(TypedDict):
     error_message: Optional[str]
     vision_model: BaseChatOpenAI
     analysis_model: BaseChatOpenAI
-
+    rag_docs: Optional[List[str]]
 
 class InputState(TypedDict):
     image_data: Optional[str]
+
+class OutputState(TypedDict):
+    nutrition_advice: Optional[NutritionAdvice]

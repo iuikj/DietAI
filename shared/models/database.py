@@ -14,6 +14,7 @@ engine = create_engine(
     settings.database_url,
     pool_pre_ping=True,
     pool_recycle=300,
+    connect_args={"client_encoding": "utf8"},
     echo=settings.debug  # 开发环境显示SQL
 )
 
