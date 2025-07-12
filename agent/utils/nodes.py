@@ -56,6 +56,7 @@ def state_init(state: AgentState, config: RunnableConfig):
         analysis_model=get_model(model_provider=configurable.analysis_model_provider,
                                  model_name=configurable.analysis_model)
     )
+    print(initial_state["current_step"])
     return initial_state
 
 
@@ -97,6 +98,7 @@ def analyze_image(state: AgentState) -> AgentState:
         response = state['vision_model'].invoke(messages)
         state["image_analysis"] = response.content
         state["current_step"] = "image_analyzed"
+        print(state["current_step"])
 
     except Exception as e:
         state["error_message"] = f"图片分析失败: {str(e)}"
@@ -145,6 +147,7 @@ def extract_nutrition_info(state: AgentState) -> AgentState:
         nutrition_analysis = structured_model.invoke(prompt)
         state["nutrition_analysis"] = nutrition_analysis
         state["current_step"] = "nutrition_extracted"
+        print(state["current_step"])
 
     except Exception as e:
         state["error_message"] = f"营养分析失败: {str(e)}"
@@ -204,6 +207,7 @@ async def retrieve_nutrition_knowledge(state: AgentState) -> AgentState:
 
         state["retrieved_documents"] = result
         state["current_step"] = "retrieve_nutrition_knowledge"
+        print(state["current_step"])
 
     except Exception as e:
         state["error_message"] = f"营养知识检索失败: {str(e)}"
@@ -244,9 +248,10 @@ def generate_dependencies(state: AgentState) -> AgentState:
 
         try:
             advice_dependencies = structured_model.invoke(prompt)
-            print("调用成功，结果:", advice_dependencies)
+            # print("调用成功，结果:", advice_dependencies)
             state["advice_dependencies"] = advice_dependencies
             state["current_step"] = "generate_dependencies"
+            print(state["current_step"])
         except Exception as e:
             print("invoke 调用异常:", e)
     except Exception as e:
@@ -331,6 +336,7 @@ def generate_nutrition_advice(state: AgentState) -> AgentState:
         state["nutrition_advice"] = nutrition_advice
 
         state["current_step"] = "advice_generated"
+        print(state["current_step"])
 
     except Exception as e:
         # state["error_message"] = f"建议生成失败: {str(e)}"
@@ -347,6 +353,7 @@ def format_final_response(state: AgentState) -> AgentState:
 
         # 这里可以添加响应格式化逻辑
         state["current_step"] = "completed"
+        print(state["current_step"])
 
     except Exception as e:
         state["error_message"] = f"响应格式化失败: {str(e)}"

@@ -32,3 +32,4 @@ class OutputState(TypedDict):
     nutrition_analysis: Optional[NutritionAnalysis]
     nutrition_advice: Optional[NutritionAdvice]
     advice_dependencies: Optional[AdviceDependencies]
+    current_step:Optional[str]

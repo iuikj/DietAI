@@ -65,8 +65,6 @@ class AdviceDependencies(BaseModel):
     )
 
 
-
-
 class ChatResponse(BaseModel):
     """聊天机器人响应结构"""
     success: bool = Field(description="是否成功")
