@@ -1,20 +1,96 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
 from typing import List, Optional
 from datetime import datetime, date
+import json
+import logging
+import traceback
+from decimal import Decimal
 
 from shared.models.database import get_db
 from shared.models.schemas import (
     BaseResponse, UserProfileUpdate, UserProfileResponse,
     HealthGoalCreate, HealthGoalResponse, DiseaseCreate, DiseaseResponse,
     AllergyCreate, AllergyResponse, WeightRecordCreate, WeightRecordResponse,
-    PaginationParams, DateRangeParams
+    OnboardingStepUpdate, OnboardingDataRequest
 )
 from shared.utils.auth import get_current_user
 from shared.models.user_models import User, UserProfile, HealthGoal, Disease, Allergy, WeightRecord
 from shared.config.redis_config import cache_service
 
-router = APIRouter(prefix="/users", tags=["用户管理"])
+router = APIRouter(prefix="/users", tags=["用户", "用户管理"])
+logger = logging.getLogger(__name__)
+
+# 错误消息常量
+class ErrorMessages:
+    """错误消息常量"""
+    PROFILE_NOT_FOUND = "用户资料不存在"
+    PROFILE_LOAD_FAILED = "获取用户资料失败"
+    PROFILE_UPDATE_FAILED = "更新用户资料失败"
+    HEALTH_GOAL_NOT_FOUND = "健康目标不存在"
+    HEALTH_GOAL_CREATE_FAILED = "创建健康目标失败"
+    HEALTH_GOAL_UPDATE_FAILED = "更新健康目标失败"
+    DISEASE_CREATE_FAILED = "添加疾病信息失败"
+    ALLERGY_CREATE_FAILED = "添加过敏信息失败"
+    WEIGHT_RECORD_CREATE_FAILED = "添加体重记录失败"
+    ONBOARDING_UPDATE_FAILED = "更新引导步骤失败"
+    ONBOARDING_COMPLETE_FAILED = "完成用户引导失败"
+    DATABASE_ERROR = "数据库操作失败"
+    UNKNOWN_ERROR = "未知错误"
+
+def handle_database_error(e: Exception, operation: str = "数据库操作") -> HTTPException:
+    """统一处理数据库错误"""
+    logger.error(f"{operation}失败: {str(e)}")
+    logger.error(f"错误类型: {type(e).__name__}")
+    logger.error(f"详细堆栈: {traceback.format_exc()}")
+    
+    if isinstance(e, SQLAlchemyError):
+        return HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"{operation}失败，请稍后重试"
+        )
+    else:
+        return HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"{operation}失败: {str(e)}"
+        )
+
+def calculate_bmi(height: Optional[float], weight: Optional[float]) -> Optional[float]:
+    """计算BMI"""
+    if height and weight and height > 0:
+        height_m = height / 100
+        return round(weight / (height_m ** 2), 2)
+    return None
+
+def format_profile_data(profile: UserProfile) -> dict:
+    """格式化用户资料数据 - 只使用数据库中存在的字段"""
+    return {
+        # 数据库中存在的字段
+        "id": profile.id,
+        "user_id": profile.user_id,
+        "real_name": profile.real_name,
+        "gender": profile.gender,
+        "birth_date": profile.birth_date.isoformat() if profile.birth_date else None,
+        "height": float(profile.height) if profile.height else None,
+        "weight": float(profile.weight) if profile.weight else None,
+        "bmi": float(profile.bmi) if profile.bmi else None,
+        "activity_level": profile.activity_level,
+        "occupation": profile.occupation,
+        "region": profile.region,
+        "created_at": profile.created_at.isoformat(),
+        "updated_at": profile.updated_at.isoformat(),
+        
+        # 以下字段在当前数据库中不存在，返回默认值以保持API兼容性
+        "dietary_preferences": None,
+        "food_dislikes": None,
+        "wake_up_time": None,
+        "sleep_time": None,
+        "meal_times": None,
+        "health_status": 1,  # 默认健康状态
+        "onboarding_completed": False,  # 默认未完成引导
+        "onboarding_step": 0,  # 默认引导步骤
+    }
 
 
 @router.get("/profile", response_model=BaseResponse)
@@ -47,29 +123,12 @@ async def get_user_profile(
             db.refresh(profile)
         
         # 计算BMI
-        bmi = None
-        if profile.height and profile.weight:
-            height_m = profile.height / 100
-            bmi = round(profile.weight / (height_m ** 2), 2)
-            if profile.bmi != bmi:
-                profile.bmi = bmi
-                db.commit()
+        bmi = calculate_bmi(profile.height, profile.weight)
+        if bmi and profile.bmi != bmi:
+            profile.bmi = bmi
+            db.commit()
         
-        profile_data = {
-            "id": profile.id,
-            "user_id": profile.user_id,
-            "real_name": profile.real_name,
-            "gender": profile.gender,
-            "birth_date": profile.birth_date.isoformat() if profile.birth_date else None,
-            "height": float(profile.height) if profile.height else None,
-            "weight": float(profile.weight) if profile.weight else None,
-            "bmi": float(profile.bmi) if profile.bmi else None,
-            "activity_level": profile.activity_level,
-            "occupation": profile.occupation,
-            "region": profile.region,
-            "created_at": profile.created_at.isoformat(),
-            "updated_at": profile.updated_at.isoformat()
-        }
+        profile_data = format_profile_data(profile)
         
         # 缓存用户资料
         cache_service.cache_user_profile(current_user.id, profile_data)
@@ -80,10 +139,7 @@ async def get_user_profile(
             data=profile_data
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"获取用户资料失败: {str(e)}"
-        )
+        raise handle_database_error(e, "获取用户资料")
 
 
 @router.put("/profile", response_model=BaseResponse)
@@ -109,9 +165,9 @@ async def update_user_profile(
                 setattr(profile, field, value)
         
         # 重新计算BMI
-        if profile.height and profile.weight:
-            height_m = profile.height / 100
-            profile.bmi = round(profile.weight / (height_m ** 2), 2)
+        bmi = calculate_bmi(profile.height, profile.weight)
+        if bmi:
+            profile.bmi = bmi
         
         profile.updated_at = datetime.utcnow()
         db.commit()
@@ -123,27 +179,11 @@ async def update_user_profile(
         return BaseResponse(
             success=True,
             message="用户资料更新成功",
-            data={
-                "id": profile.id,
-                "user_id": profile.user_id,
-                "real_name": profile.real_name,
-                "gender": profile.gender,
-                "birth_date": profile.birth_date.isoformat() if profile.birth_date else None,
-                "height": float(profile.height) if profile.height else None,
-                "weight": float(profile.weight) if profile.weight else None,
-                "bmi": float(profile.bmi) if profile.bmi else None,
-                "activity_level": profile.activity_level,
-                "occupation": profile.occupation,
-                "region": profile.region,
-                "updated_at": profile.updated_at.isoformat()
-            }
+            data=format_profile_data(profile)
         )
     except Exception as e:
         db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"更新用户资料失败: {str(e)}"
-        )
+        raise handle_database_error(e, "更新用户资料")
 
 
 @router.post("/health-goals", response_model=BaseResponse)
@@ -188,10 +228,7 @@ async def create_health_goal(
         )
     except Exception as e:
         db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"创建健康目标失败: {str(e)}"
-        )
+        raise handle_database_error(e, "创建健康目标")
 
 
 @router.get("/health-goals", response_model=BaseResponse)
@@ -228,10 +265,7 @@ async def get_health_goals(
             data=goals_data
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"获取健康目标列表失败: {str(e)}"
-        )
+        raise handle_database_error(e, "获取健康目标列表")
 
 
 @router.put("/health-goals/{goal_id}", response_model=BaseResponse)
@@ -251,7 +285,7 @@ async def update_health_goal(
         if not goal:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="健康目标不存在"
+                detail=ErrorMessages.HEALTH_GOAL_NOT_FOUND
             )
         
         # 更新字段
@@ -276,14 +310,11 @@ async def update_health_goal(
                 "updated_at": goal.updated_at.isoformat()
             }
         )
-    except HTTPException as e:
-        raise e
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"更新健康目标失败: {str(e)}"
-        )
+        raise handle_database_error(e, "更新健康目标")
 
 
 @router.post("/diseases", response_model=BaseResponse)
@@ -324,10 +355,7 @@ async def add_disease(
         )
     except Exception as e:
         db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"添加疾病信息失败: {str(e)}"
-        )
+        raise handle_database_error(e, "添加疾病信息")
 
 
 @router.get("/diseases", response_model=BaseResponse)
@@ -365,10 +393,7 @@ async def get_diseases(
             data=diseases_data
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"获取疾病信息列表失败: {str(e)}"
-        )
+        raise handle_database_error(e, "获取疾病信息列表")
 
 
 @router.post("/allergies", response_model=BaseResponse)
@@ -406,10 +431,7 @@ async def add_allergy(
         )
     except Exception as e:
         db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"添加过敏信息失败: {str(e)}"
-        )
+        raise handle_database_error(e, "添加过敏信息")
 
 
 @router.get("/allergies", response_model=BaseResponse)
@@ -445,10 +467,7 @@ async def get_allergies(
             data=allergies_data
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"获取过敏信息列表失败: {str(e)}"
-        )
+        raise handle_database_error(e, "获取过敏信息列表")
 
 
 @router.post("/weight-records", response_model=BaseResponse)
@@ -459,12 +478,9 @@ async def add_weight_record(
 ):
     """添加体重记录"""
     try:
-        # 计算BMI
-        bmi = None
+        # 获取用户资料并计算BMI
         user_profile = db.query(UserProfile).filter(UserProfile.user_id == current_user.id).first()
-        if user_profile and user_profile.height:
-            height_m = user_profile.height / 100
-            bmi = round(weight_data.weight / (height_m ** 2), 2)
+        bmi = calculate_bmi(user_profile.height if user_profile else None, weight_data.weight)
         
         weight_record = WeightRecord(
             user_id=current_user.id,
@@ -509,10 +525,7 @@ async def add_weight_record(
         )
     except Exception as e:
         db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"添加体重记录失败: {str(e)}"
-        )
+        raise handle_database_error(e, "添加体重记录")
 
 
 @router.get("/weight-records", response_model=BaseResponse)
@@ -555,7 +568,244 @@ async def get_weight_records(
             data=records_data
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"获取体重记录列表失败: {str(e)}"
-        ) 
+        raise handle_database_error(e, "获取体重记录列表")
+
+
+# 用户引导相关端点
+@router.get("/onboarding/status", response_model=BaseResponse)
+async def get_onboarding_status(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """获取用户引导状态 - 简化版本，因为引导字段不存在"""
+    try:
+        logger.info(f"开始获取用户 {current_user.id} 的引导状态")
+        
+        profile = db.query(UserProfile).filter(UserProfile.user_id == current_user.id).first()
+        
+        if not profile:
+            logger.info(f"用户 {current_user.id} 没有资料，创建新的资料")
+            profile = UserProfile(
+                user_id=current_user.id,
+                activity_level=2
+            )
+            db.add(profile)
+            db.commit()
+            db.refresh(profile)
+            logger.info(f"用户 {current_user.id} 的资料创建成功")
+        
+        # 由于引导字段不存在，返回默认值
+        data = {
+            "onboarding_completed": False,  # 默认未完成
+            "current_step": 0,  # 默认步骤
+            "total_steps": 6,
+            "next_step": 1  # 默认下一步
+        }
+        
+        logger.info(f"用户 {current_user.id} 的引导状态: {data}")
+        
+        return BaseResponse(
+            success=True,
+            message="获取引导状态成功",
+            data=data
+        )
+    except Exception as e:
+        raise handle_database_error(e, "获取引导状态")
+
+
+@router.post("/onboarding/step", response_model=BaseResponse)
+async def update_onboarding_step(
+    step_data: OnboardingStepUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """更新用户引导步骤 - 简化版本"""
+    try:
+        profile = db.query(UserProfile).filter(UserProfile.user_id == current_user.id).first()
+        
+        if not profile:
+            profile = UserProfile(
+                user_id=current_user.id,
+                activity_level=2
+            )
+            db.add(profile)
+        
+        # 处理步骤数据，只更新存在的字段
+        if step_data.data:
+            for key, value in step_data.data.items():
+                if hasattr(profile, key):
+                    # 跳过数据库中不存在的字段
+                    if key in ['dietary_preferences', 'food_dislikes', 'meal_times', 'wake_up_time', 'sleep_time', 'health_status', 'onboarding_step', 'onboarding_completed']:
+                        logger.warning(f"跳过不存在的字段: {key}")
+                        continue
+                    else:
+                        setattr(profile, key, value)
+        
+        profile.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(profile)
+        
+        # 清除缓存
+        cache_service.clear_user_cache(current_user.id)
+        
+        return BaseResponse(
+            success=True,
+            message="引导步骤更新成功",
+            data={
+                "current_step": step_data.step,
+                "completed": step_data.completed,
+                "next_step": step_data.step + 1 if not step_data.completed else None
+            }
+        )
+    except Exception as e:
+        db.rollback()
+        raise handle_database_error(e, "更新引导步骤")
+
+
+@router.post("/onboarding/complete", response_model=BaseResponse)
+async def complete_onboarding(
+    onboarding_data: OnboardingDataRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """完成用户引导并批量保存数据 - 简化版本"""
+    try:
+        profile = db.query(UserProfile).filter(UserProfile.user_id == current_user.id).first()
+        
+        if not profile:
+            profile = UserProfile(
+                user_id=current_user.id,
+                activity_level=2
+            )
+            db.add(profile)
+        
+        # 更新基本信息
+        if onboarding_data.basic_info:
+            for key, value in onboarding_data.basic_info.items():
+                if hasattr(profile, key):
+                    if key == 'birth_date' and isinstance(value, str):
+                        profile.birth_date = datetime.strptime(value, "%Y-%m-%d").date()
+                    else:
+                        setattr(profile, key, value)
+        
+        # 更新身体数据
+        if onboarding_data.physical_data:
+            for key, value in onboarding_data.physical_data.items():
+                if hasattr(profile, key):
+                    setattr(profile, key, value)
+        
+        # 跳过不存在的字段
+        if onboarding_data.dietary_preferences:
+            logger.warning("跳过dietary_preferences字段，数据库中不存在")
+        
+        if onboarding_data.lifestyle_habits:
+            for key, value in onboarding_data.lifestyle_habits.items():
+                if hasattr(profile, key):
+                    if key in ['meal_times', 'wake_up_time', 'sleep_time']:
+                        logger.warning(f"跳过不存在的字段: {key}")
+                        continue
+                    else:
+                        setattr(profile, key, value)
+        
+        # 计算BMI
+        bmi = calculate_bmi(profile.height, profile.weight)
+        if bmi:
+            profile.bmi = bmi
+        
+        profile.updated_at = datetime.utcnow()
+        
+        db.commit()
+        db.refresh(profile)
+        
+        # 创建健康目标
+        health_goals_created = 0
+        if onboarding_data.health_goals:
+            for goal_data in onboarding_data.health_goals:
+                health_goal = HealthGoal(
+                    user_id=current_user.id,
+                    goal_type=goal_data.get('goal_type', 1),
+                    target_weight=goal_data.get('target_weight'),
+                    target_date=datetime.strptime(goal_data['target_date'], "%Y-%m-%d").date() if goal_data.get('target_date') else None,
+                    current_status=1
+                )
+                db.add(health_goal)
+                health_goals_created += 1
+        
+        # 添加疾病信息
+        diseases_added = 0
+        if onboarding_data.medical_conditions:
+            for condition in onboarding_data.medical_conditions:
+                disease = Disease(
+                    user_id=current_user.id,
+                    disease_name=condition['disease_name'],
+                    disease_code=condition.get('disease_code'),
+                    severity_level=condition.get('severity_level', 1),
+                    diagnosed_date=datetime.strptime(condition['diagnosed_date'], "%Y-%m-%d").date() if condition.get('diagnosed_date') else None,
+                    notes=condition.get('notes')
+                )
+                db.add(disease)
+                diseases_added += 1
+        
+        # 添加过敏信息
+        allergies_added = 0
+        if onboarding_data.allergies:
+            for allergy_data in onboarding_data.allergies:
+                allergy = Allergy(
+                    user_id=current_user.id,
+                    allergen_type=allergy_data.get('allergen_type', 1),
+                    allergen_name=allergy_data['allergen_name'],
+                    severity_level=allergy_data.get('severity_level', 1),
+                    reaction_description=allergy_data.get('reaction_description')
+                )
+                db.add(allergy)
+                allergies_added += 1
+        
+        db.commit()
+        
+        # 清除缓存
+        cache_service.clear_user_cache(current_user.id)
+        
+        return BaseResponse(
+            success=True,
+            message="用户引导完成成功",
+            data={
+                "profile_id": profile.id,
+                "onboarding_completed": True,  # 返回默认值
+                "bmi": float(profile.bmi) if profile.bmi else None,
+                "health_goals_created": health_goals_created,
+                "medical_conditions_added": diseases_added,
+                "allergies_added": allergies_added
+            }
+        )
+    except Exception as e:
+        db.rollback()
+        raise handle_database_error(e, "完成用户引导")
+
+
+@router.post("/onboarding/reset", response_model=BaseResponse)
+async def reset_onboarding(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """重置用户引导状态 - 简化版本"""
+    try:
+        profile = db.query(UserProfile).filter(UserProfile.user_id == current_user.id).first()
+        
+        if profile:
+            profile.updated_at = datetime.utcnow()
+            db.commit()
+            
+            # 清除缓存
+            cache_service.clear_user_cache(current_user.id)
+        
+        return BaseResponse(
+            success=True,
+            message="引导状态重置成功",
+            data={
+                "onboarding_completed": False,
+                "current_step": 0
+            }
+        )
+    except Exception as e:
+        db.rollback()
+        raise handle_database_error(e, "重置引导状态") 

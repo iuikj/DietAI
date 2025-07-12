@@ -3,51 +3,42 @@
 from langgraph_sdk import get_client
 client = get_client(url="http://127.0.0.1:2024")
 # 调用营养师Agent进行分析
-assistant = await client.assistants.create(
-    graph_id="nutrition_agent",
-    config={
-        "configurable": {
-            "vision_model_provider": "openai",
-            "vision_model": "gpt-4.1-nano-2025-04-14",
-            "analysis_model_provider": "openai",
-            "analysis_model": "o3-mini-2025-01-31"
-        }
-    }
-)
-thread = await client.threads.create()
-run = await client.runs.create(
-    assistant_id=assistant["assistant_id"],
-    thread_id=thread['thread_id'],
-    input={
-        "image_data": image_base64,
-        "user_preferences": user_prefs
-    }
-)
-print("Processing...")
-while True:
-    result = await client.threads.get_state(thread["thread_id"])
-    current_step = result.get('values').get("current_step")
-    print(f"Current step: {current_step}")
-    if result.get('values').get("error_message") is not None:
-        print(result.get('values').get("error_message"))
-        raise HTTPException(status_code=500, detail=result["error_message"])
-    if current_step == "completed":
-        print(json.dumps(result,indent=2))
-        break
-# result = await client.threads.get_state(thread["thread_id"])
-print(result
-result=result.get("values"
-# 格式化返回结果
-response = {
-    "success": True,
-    "filename": file.filename,
-    "analysis": {
-        "image_description": result["image_analysis"],
-        "nutrition_facts": result["nutrition_analysis"] if result["nutrition_analysis"] else None,
-        "recommendations": result["nutrition_advice"] if result["nutrition_advice"] else None
-    },
-    "processing_step": result["current_step"]
-}
+ # 创建营养师Agent
+        assistant = await client.assistants.create(
+            graph_id="nutrition_agent",
+            config={
+                "configurable": {
+                    "vision_model_provider": "openai",
+                    "vision_model": "gpt-4.1-nano-2025-04-14",
+                    "analysis_model_provider": "openai",
+                    "analysis_model": "o3-mini-2025-01-31"
+                }
+            }
+        )
+
+        # 创建线程
+        thread = await client.threads.create()
+
+        async for chunk in client.runs.stream(
+                assistant_id=assistant["assistant_id"],
+                thread_id=thread['thread_id'],
+                input={
+                    "image_data": image_base64,
+                    "user_preferences": user_prefs
+                }
+        ):
+            if chunk.data is not None:
+                if chunk.data.get("current_step") == "completed":
+                    print("Agent分析完成")
+                    return AgentAnalysisData(
+                        image_description=chunk.data.get("image_analysis"),
+                        nutrition_facts=NutritionFacts(
+                            **chunk.data.get("nutrition_analysis")
+                        ),
+                        recommendations=Recommendations(
+                            **chunk.data.get("nutrition_advice")
+                        )
+                    )
 ```
 
 ## 集成到食物记录API的完整示例
@@ -239,6 +230,64 @@ if summary_result['success']:
   }
 }
 ```
+
+## 对话的流式输出
+
+LLM tokens¶
+Use the messages-tuple streaming mode to stream Large Language Model (LLM) outputs token by token from any part of your graph, including nodes, tools, subgraphs, or tasks.
+
+The streamed output from messages-tuple mode is a tuple (message_chunk, metadata) where:
+
+message_chunk: the token or message segment from the LLM.
+metadata: a dictionary containing details about the graph node and LLM invocation.
+Example graph
+```python
+from dataclasses import dataclass
+
+from langchain.chat_models import init_chat_model
+from langgraph.graph import StateGraph, START
+
+@dataclass
+class MyState:
+    topic: str
+    joke: str = ""
+
+llm = init_chat_model(model="openai:gpt-4o-mini")
+
+def call_model(state: MyState):
+    """Call the LLM to generate a joke about a topic"""
+    llm_response = llm.invoke( 
+        [
+            {"role": "user", "content": f"Generate a joke about {state.topic}"}
+        ]
+    )
+    return {"joke": llm_response.content}
+
+graph = (
+    StateGraph(MyState)
+    .add_node(call_model)
+    .add_edge(START, "call_model")
+    .compile()
+)
+
+```
+
+流式输出
+```python
+async for chunk in client.runs.stream(
+    thread_id,
+    assistant_id,
+    input={"topic": "ice cream"},
+    stream_mode="messages-tuple",
+):
+    if chunk.event != "messages":
+        continue
+
+    message_chunk, metadata = chunk.data  
+    if message_chunk["content"]:
+        print(message_chunk["content"], end="|", flush=True)
+```
+
 
 ## 分析状态说明
 

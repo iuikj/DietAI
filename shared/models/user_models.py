@@ -32,7 +32,7 @@ class User(Base):
 
 
 class UserProfile(Base):
-    """用户资料表"""
+    """用户资料表 - 最小化版本，只包含数据库中确实存在的字段"""
     __tablename__ = "user_profiles"
     
     id = Column(Integer, primary_key=True, index=True)
@@ -46,11 +46,22 @@ class UserProfile(Base):
     activity_level = Column(Integer, default=2)  # 1:久坐 2:轻度 3:中度 4:重度 5:超重度
     occupation = Column(String(100), nullable=True)
     region = Column(String(100), nullable=True)
+    
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
     
     # 关系
     user = relationship("User", back_populates="profile")
+    
+    # 以下字段在当前数据库中不存在，如果需要需要通过数据库迁移添加：
+    # - dietary_preferences (Text, JSON格式存储饮食偏好)
+    # - food_dislikes (Text, JSON格式存储不喜欢的食物)  
+    # - wake_up_time (String(10), 起床时间 HH:MM)
+    # - sleep_time (String(10), 睡觉时间 HH:MM)
+    # - meal_times (Text, JSON格式存储用餐时间)
+    # - health_status (Integer, 健康状态)
+    # - onboarding_completed (Boolean, 引导完成状态)
+    # - onboarding_step (Integer, 当前引导步骤)
 
 
 class HealthGoal(Base):
