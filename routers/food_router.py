@@ -179,7 +179,7 @@ async def create_food_record_traditional(
                 from concurrent.futures import ThreadPoolExecutor
                 
                 def background_analysis():
-                    asyncio.run(_run_background_analysis(food_data.image_url, current_user, food_record.id))
+                    asyncio.run( _run_background_analysis(food_data.image_url, current_user, food_record.id))
                 
                 executor = ThreadPoolExecutor(max_workers=1)
                 executor.submit(background_analysis)
@@ -378,7 +378,8 @@ async def analyze_food_image_with_agent(image_url: str, current_user: User):
                 input={
                     "image_data": image_base64,
                     "user_preferences": user_prefs
-                }
+                },
+                stream_mode="values"
         ):
             if chunk.data is not None:
                 if chunk.data.get("current_step") == "completed":
@@ -392,6 +393,9 @@ async def analyze_food_image_with_agent(image_url: str, current_user: User):
                         }
                     }
                 else:
+                    print(f"Agent正在分析: {chunk.data}")
+                    print("===================")
+                    print(chunk.data.get("current_step"))
                     yield {
                         "type": "analysis_progress",
                         "data": {
