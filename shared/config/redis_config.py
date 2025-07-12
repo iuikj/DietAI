@@ -8,6 +8,7 @@ from .settings import get_settings
 
 settings = get_settings()
 
+
 class RedisConfig:
     """Redis配置类"""
     
@@ -24,6 +25,7 @@ class RedisConfig:
         if self.password:
             return f"redis://:{self.password}@{self.host}:{self.port}/{self.db}"
         return f"redis://{self.host}:{self.port}/{self.db}"
+
 
 class RedisManager:
     """Redis管理器"""

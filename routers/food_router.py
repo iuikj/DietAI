@@ -20,6 +20,9 @@ from shared.models.user_models import User
 from shared.models.food_models import FoodRecord, NutritionDetail, DailyNutritionSummary, FoodDatabase
 from shared.config.redis_config import cache_service
 from shared.config.minio_config import minio_client
+from shared.config.settings import get_settings
+
+settings = get_settings()
 
 router = APIRouter(prefix="/foods", tags=["食物记录"])
 
@@ -180,7 +183,6 @@ async def create_food_record_traditional(
                 
                 def background_analysis():
                     asyncio.run( _run_background_analysis(food_data.image_url, current_user, food_record.id))
-                
                 executor = ThreadPoolExecutor(max_workers=1)
                 executor.submit(background_analysis)
 
@@ -203,7 +205,7 @@ async def create_food_record_traditional(
             "image_url": food_record.image_url,
             "recording_method": food_record.recording_method,
             "analysis_status": food_record.analysis_status,
-            "created_at": food_record.created_at.isoformat(),
+            "created_at": food_record.created_at.isoformat(),  # 包含Agent分析结果
         }
 
         return BaseResponse(
@@ -413,6 +415,77 @@ async def analyze_food_image_with_agent(image_url: str, current_user: User):
         raise e
 
 
+async def get_user_preferences(db: Session, user_id: int):
+    try:
+        user = db.query(User).filter(user_id == User.id).first()
+        if not user:
+            return {
+                "dietary_restrictions": [],
+                "health_goals": [],
+                "language": "zh-CN"
+            }
+        # 饮食限制
+        dietary_restrictions = []
+        if user.allergies:
+            dietary_restrictions.extend([
+                {
+                    "allergen_name": allergy.allergen_name,
+                    "severity_level": allergy.severity_level,
+                    "reaction_description": allergy.reaction_description,
+                    "created_at": allergy.created_at.isoformat() if allergy.created_at else None,
+                    "updated_at": allergy.updated_at.isoformat() if allergy.updated_at else None
+                }
+                for allergy in user.allergies
+            ])
+        # 处理疾病信息
+        if user.diseases:
+            dietary_restrictions.extend([
+                {
+                    "disease_name": disease.disease_name,
+                    "severity_level": disease.severity_level,
+                    "diagnosed_date": disease.diagnosed_date.isoformat() if disease.diagnosed_date else None,
+                    "is_current": disease.is_current,
+                    "notes": disease.notes,
+                    "created_at": disease.created_at.isoformat() if disease.created_at else None,
+                    "updated_at": disease.updated_at.isoformat() if disease.updated_at else None
+                }
+                for disease in user.diseases
+            ])
+        # 健康目标
+        health_goals = []
+        if user.health_goals:
+            health_goals.extend([
+                {
+                    "goal_type": goal.goal_type,  # 1:减重 2:增重 3:维持 4:增肌 5:减脂
+                    "target_weight": float(goal.target_weight) if goal.target_weight is not None else None,
+                    "target_date": goal.target_date.isoformat() if goal.target_date else None,
+                    "current_status": goal.current_status,  # 1:进行中 2:已完成 3:已暂停 4:已取消
+                    "created_at": goal.created_at.isoformat() if goal.created_at else None,
+                    "updated_at": goal.updated_at.isoformat() if goal.updated_at else None,
+                }
+                for goal in user.health_goals])
+            health_goals.extend([{"goal_type_mean:": "1:减重 2:增重 3:维持 4:增肌 5:减脂",
+                                  "current_status_mean": "1:进行中 2:已完成 3:已暂停 4:已取消"}])
+
+        language = "zh-CN"
+
+        return {
+            "dietary_restrictions": dietary_restrictions,
+            "health_goals": health_goals,
+            "language": language
+        }
+
+    except Exception as e:
+        print(f"获取用户偏好失败: {e}")
+
+        # 返回一个默认偏好，防止后续逻辑出错
+        return {
+            "dietary_restrictions": [],
+            "health_goals": [],
+            "language": "zh-CN"
+        }
+
+
 async def get_image_base64_from_url(image_identifier: str) -> str:
     """从图片标识符获取base64编码的图片数据"""
     try:
@@ -473,22 +546,42 @@ async def create_nutrition_detail_from_analysis(food_record_id: int, nutrition_f
             protein=nutrition_facts.macronutrients.protein or 0,
             fat=nutrition_facts.macronutrients.fat or 0,
             carbohydrates=nutrition_facts.macronutrients.carbohydrates or 0,
-            dietary_fiber=0,  #TODO:Agent忘写膳食纤维了(下面同理)
-            sugar=0,
-            sodium=0,
-            cholesterol=0,
+            # dietary_fiber=0,  #TODO:Agent忘写膳食纤维了(下面同理) 已完成
+            # sugar=0,
+            # sodium=0,
+            # cholesterol=0,
+            dietary_fiber=nutrition_facts.macronutrients.dietary_fiber or 0,
+            sugar=nutrition_facts.macronutrients.sugar or 0,
+            # 微量营养素
+            sodium=nutrition_facts.vitamins_minerals.sodium or 0,
+            cholesterol=nutrition_facts.vitamins_minerals.cholesterol or 0,
+
+            # 维生素
+            vitamin_a=nutrition_facts.vitamins_minerals.vitamin_a or 0,
+            vitamin_c=nutrition_facts.vitamins_minerals.vitamin_c or 0,
+            vitamin_d=nutrition_facts.vitamins_minerals.vitamin_d or 0,
+
+            # 矿物质
+            calcium=nutrition_facts.vitamins_minerals.calcium or 0,
+            iron=nutrition_facts.vitamins_minerals.iron or 0,
+            potassium=nutrition_facts.vitamins_minerals.potassium or 0,
             # vitamin_a=nutrition_facts.vitamins_minerals.vitamin_a or 0,
             # vitamin_c=nutrition_facts.vitamins_minerals.vitamin_c or 0,
             # vitamin_d=0,
             # calcium=nutrition_facts.vitamins_minerals.calcium or 0,
             # iron=0,
             # potassium=0,
-            # confidence_score=0,
+            # confidence_score=0,#TODO:confidence_score还未实现
             analysis_method="agent_analysis"
         )
 
-        db.add(nutrition_detail)
-        db.commit()
+        try:
+            db.add(nutrition_detail)
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            print(f"添加数据库失败: {str(e)}")
+            raise e
 
     except Exception as e:
         print(f"创建营养详情失败: {str(e)}")
@@ -507,14 +600,14 @@ async def get_food_records(
 ):
     """获取食物记录列表"""
     try:
-        query = db.query(FoodRecord).filter(FoodRecord.user_id == current_user.id)
+        query = db.query(FoodRecord).filter(current_user.id == FoodRecord.user_id)
 
         if start_date:
             query = query.filter(FoodRecord.record_date >= start_date)
         if end_date:
             query = query.filter(FoodRecord.record_date <= end_date)
         if meal_type:
-            query = query.filter(FoodRecord.meal_type == meal_type)
+            query = query.filter(meal_type == FoodRecord.meal_type)
 
         # 总数统计
         total = query.count()

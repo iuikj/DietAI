@@ -12,9 +12,12 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_qwq import ChatQwQ, ChatQwen
 
 from agent.utils.configuration import *
+
+
 @lru_cache(maxsize=4)
 def get_model(model_provider: Enum, model_name: str):
-    load_dotenv(f"../../.env", override=True)
+    load_dotenv(f".env", override=True)
+    print(f"环境变量加载+++++++++++++++++++{os.getenv("OPENAI_API_KEY")}")
     match model_provider:
         # case "groq":
         #     return ChatGroq(model_name=model_name)

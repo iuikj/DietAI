@@ -14,6 +14,7 @@ from shared.models.user_models import User, UserProfile, HealthGoal, WeightRecor
 from shared.models.food_models import DailyNutritionSummary
 from shared.config.redis_config import cache_service
 
+
 router = APIRouter(prefix="/health", tags=["健康分析"])
 
 
@@ -37,7 +38,7 @@ async def health_analysis(
                 analysis_request.date_range,
                 db
             )
-        elif analysis_type == "health_score":
+        elif analysis_type == "health_level":
             result = await calculate_health_score(
                 current_user.id,
                 analysis_request.date_range,
