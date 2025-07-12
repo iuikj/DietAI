@@ -21,6 +21,7 @@ from shared.models.food_models import FoodRecord, NutritionDetail, DailyNutritio
 from shared.config.redis_config import cache_service
 from shared.config.minio_config import minio_client
 from shared.config.settings import get_settings
+from fastapi.responses import StreamingResponse
 
 settings = get_settings()
 
@@ -34,12 +35,12 @@ async def create_food_record(
         db: Session = Depends(get_db)
 ):
     """创建食物记录并使用Agent分析图片（流式输出）"""
-    
+
     async def generate_sse_stream():
         try:
             # 1. 首先发送创建记录的状态
             yield f"data: {json.dumps({'type': 'record_created', 'data': {'status': 'creating', 'message': '正在创建食物记录...'}, 'success': True}, ensure_ascii=False)}\n\n"
-            
+
             # 创建食物记录
             food_record = FoodRecord(
                 user_id=current_user.id,
@@ -69,7 +70,7 @@ async def create_food_record(
                 "analysis_status": food_record.analysis_status,
                 "created_at": food_record.created_at.isoformat(),
             }
-            
+
             yield f"data: {json.dumps({'type': 'record_created', 'data': {'record': record_data, 'status': 'created', 'message': '食物记录创建成功'}, 'success': True}, ensure_ascii=False)}\n\n"
 
             # 3. 如果有图片URL，则使用Agent进行分析
@@ -78,7 +79,7 @@ async def create_food_record(
                     # 设置分析状态为处理中
                     food_record.analysis_status = 2  # 分析中
                     db.commit()
-                    
+
                     yield f"data: {json.dumps({'type': 'analysis_started', 'data': {'status': 'analyzing', 'message': '开始分析图片...'}, 'success': True}, ensure_ascii=False)}\n\n"
 
                     # 使用Agent分析图片（流式输出）
@@ -108,7 +109,7 @@ async def create_food_record(
 
                         # 触发每日营养汇总更新
                         await update_daily_nutrition_summary(current_user.id, food_data.record_date, db)
-                        
+
                         yield f"data: {json.dumps({'type': 'nutrition_saved', 'data': {'status': 'completed', 'message': '营养分析完成并已保存'}, 'success': True}, ensure_ascii=False)}\n\n"
                     else:
                         # 如果分析失败，设置为待分析
@@ -146,6 +147,83 @@ async def create_food_record(
     )
 
 
+#
+# @router.post("/records/traditional", response_model=BaseResponse)
+# async def create_food_record_traditional(
+#         food_data: FoodRecordCreate,
+#         current_user: User = Depends(get_current_user),
+#         db: Session = Depends(get_db)
+# ):
+#     """创建食物记录（传统接口，不使用流式输出）"""
+#     try:
+#         # 创建食物记录
+#         food_record = FoodRecord(
+#             user_id=current_user.id,
+#             record_date=food_data.record_date,
+#             meal_type=food_data.meal_type,
+#             food_name=food_data.food_name,
+#             description=food_data.description,
+#             image_url=food_data.image_url,
+#             recording_method=food_data.recording_method or 1,
+#             analysis_status=1  # 待分析
+#         )
+#
+#         db.add(food_record)
+#         db.commit()
+#         db.refresh(food_record)
+#
+#         # 如果有图片URL，异步启动分析（不等待完成）
+#         if food_data.image_url:
+#             try:
+#                 # 设置分析状态为处理中
+#                 food_record.analysis_status = 2  # 分析中
+#                 db.commit()
+#
+#                 # 异步分析（在后台进行）
+#                 import asyncio
+#                 from concurrent.futures import ThreadPoolExecutor
+#
+#                 def background_analysis():
+#                     asyncio.run(_run_background_analysis(food_data.image_url, current_user, food_record.id))
+#
+#                 executor = ThreadPoolExecutor(max_workers=1)
+#                 executor.submit(background_analysis)
+#
+#             except Exception as e:
+#                 print(f"启动后台分析失败: {str(e)}")
+#                 # 分析启动失败，但记录已创建成功
+#
+#         # 清除相关缓存
+#         cache_key = f"nutrition:daily:{current_user.id}:{food_data.record_date}"
+#         cache_service.redis.delete(cache_key)
+#
+#         # 构建响应数据
+#         response_data = {
+#             "id": food_record.id,
+#             "user_id": food_record.user_id,
+#             "record_date": food_record.record_date.isoformat(),
+#             "meal_type": food_record.meal_type,
+#             "food_name": food_record.food_name,
+#             "description": food_record.description,
+#             "image_url": food_record.image_url,
+#             "recording_method": food_record.recording_method,
+#             "analysis_status": food_record.analysis_status,
+#             "created_at": food_record.created_at.isoformat(),
+#             "analysis_result": analysis_result  # 包含Agent分析结果
+#         }
+#
+#         return BaseResponse(
+#             success=True,
+#             message="食物记录创建成功，图片正在后台分析",
+#             data=response_data
+#         )
+#
+#     except Exception as e:
+#         db.rollback()
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail=f"创建食物记录失败: {str(e)}"
+#         )
 @router.post("/records/traditional", response_model=BaseResponse)
 async def create_food_record_traditional(
         food_data: FoodRecordCreate,
@@ -176,11 +254,11 @@ async def create_food_record_traditional(
                 # 设置分析状态为处理中
                 food_record.analysis_status = 2  # 分析中
                 db.commit()
-                
+
                 # 异步分析（在后台进行）
                 import asyncio
                 from concurrent.futures import ThreadPoolExecutor
-                
+
                 def background_analysis():
                     asyncio.run( _run_background_analysis(food_data.image_url, current_user, food_record.id))
                 executor = ThreadPoolExecutor(max_workers=1)
@@ -226,18 +304,18 @@ async def _run_background_analysis(image_url: str, current_user: User, food_reco
     """后台运行图片分析"""
     try:
         from shared.models.database import get_db
-        
+
         # 获取数据库会话
         db_gen = get_db()
         db = next(db_gen)
-        
+
         try:
             # 获取食物记录
             food_record = db.query(FoodRecord).filter(FoodRecord.id == food_record_id).first()
             if not food_record:
                 print(f"食物记录不存在: {food_record_id}")
                 return
-            
+
             # 运行分析
             analysis_complete_data = None
             async for chunk in analyze_food_image_with_agent(image_url, current_user):
@@ -267,10 +345,10 @@ async def _run_background_analysis(image_url: str, current_user: User, food_reco
                 # 分析失败
                 food_record.analysis_status = 1  # 待分析
                 db.commit()
-                
+
         finally:
             db.close()
-            
+
     except Exception as e:
         print(f"后台分析失败: {str(e)}")
 
@@ -344,22 +422,18 @@ async def confirm_food_record(
         )
 
 
-async def analyze_food_image_with_agent(image_url: str, current_user: User):
+async def analyze_food_image_with_agent(image_url: str, current_user: User,db: Session):
     """使用Langgraph Agent分析食物图片（流式输出）"""
+
     try:
         # 初始化Langgraph客户端
-        # TODO:之后使用setting来传递这种参数配置
-        client = get_client(url="http://127.0.0.1:2024")
-
+        # client = get_client(url="http://127.0.0.1:2024")
+        client = get_client(url=settings.ai_service_url)
         # 从MinIO获取图片数据并转换为base64
         image_base64 = await get_image_base64_from_url(image_url)
 
-        # 构建用户偏好设置（可以从用户配置中获取）
-        user_prefs = {
-            "dietary_restrictions": [],  # 可以从用户配置获取
-            "health_goals": [],  # 可以从用户配置获取
-            "language": "zh-CN"  # 中文
-        }
+        user_prefs = await get_user_preferences(db, current_user.id)
+
         # 创建营养师Agent
         assistant = await client.assistants.create(
             graph_id="nutrition_agent",
@@ -372,6 +446,7 @@ async def analyze_food_image_with_agent(image_url: str, current_user: User):
                 }
             }
         )
+
         # 创建线程
         thread = await client.threads.create()
         async for chunk in client.runs.stream(
@@ -395,9 +470,6 @@ async def analyze_food_image_with_agent(image_url: str, current_user: User):
                         }
                     }
                 else:
-                    print(f"Agent正在分析: {chunk.data}")
-                    print("===================")
-                    print(chunk.data.get("current_step"))
                     yield {
                         "type": "analysis_progress",
                         "data": {
