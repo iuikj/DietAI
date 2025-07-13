@@ -1,19 +1,21 @@
 from pydantic import BaseModel, Field, EmailStr, validator
-from typing import Optional, List, Dict, Any, Union
+from typing import Optional, List, Dict, Any, Union, Generic, TypeVar
 from datetime import datetime, date
 from enum import IntEnum
 
+# 定义泛型类型变量
+T = TypeVar('T')
 
 # 基础响应模型
-class BaseResponse(BaseModel):
+class BaseResponse(BaseModel, Generic[T]):
     """基础响应模型"""
     success: bool = Field(..., description="是否成功")
     message: str = Field(..., description="消息")
-    data: Optional[Any] = Field(None, description="数据")
+    data: Optional[T] = Field(None, description="数据")
     timestamp: datetime = Field(default_factory=datetime.now, description="时间戳")
 
 
-class PaginatedResponse(BaseResponse):
+class PaginatedResponse(BaseResponse[T]):
     """分页响应模型"""
     pagination: Optional[Dict[str, Any]] = Field(None, description="分页信息")
 

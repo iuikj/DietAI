@@ -12,7 +12,7 @@ from datetime import datetime
 # 导入配置
 from shared.config.settings import get_settings
 from shared.models.database import create_tables, engine
-from shared.models import user_models, food_models, conversation_models
+from shared.models import user_models, food_models, conversation_models, saved_meal_models
 
 # 导入路由
 from routers.auth_router import router as auth_router
@@ -21,6 +21,7 @@ from routers.food_router import router as food_router
 from routers.health_router import router as health_router
 from routers.chat_router import router as chat_router
 from routers.analysis_chat_router import router as analysis_chat_router
+from routers.saved_meals_router import router as saved_meals_router
 
 settings = get_settings()
 
@@ -215,6 +216,7 @@ app.include_router(food_router, prefix="/api", tags=["食物"])
 app.include_router(health_router, prefix="/api", tags=["健康"])
 app.include_router(chat_router, prefix="/api", tags=["AI对话"])
 app.include_router(analysis_chat_router, prefix="/api", tags=["分析页面聊天"])
+app.include_router(saved_meals_router, prefix="/api", tags=["保存菜品"])
 
 # 启动服务器
 if __name__ == "__main__":

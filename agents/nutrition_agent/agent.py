@@ -1,8 +1,7 @@
 from langgraph.graph import StateGraph, END
-from langgraph.prebuilt import ToolNode, tools_condition
-from agent.utils.configuration import Configuration
-from agent.utils.nodes import *
-from agent.utils.states import AgentState, InputState, OutputState
+
+from agents.nutrition_agent.utils.nodes import *
+from agents.nutrition_agent.utils.states import AgentState, InputState, OutputState
 
 workflow = StateGraph(
     state_schema=AgentState,

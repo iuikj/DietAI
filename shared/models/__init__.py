@@ -3,6 +3,7 @@ from .database import Base, get_db, create_tables, drop_tables
 from .user_models import User, UserProfile, HealthGoal, Disease, Allergy, WeightRecord
 from .food_models import FoodRecord, NutritionDetail, DailyNutritionSummary, FoodDatabase
 from .conversation_models import ConversationSession, ConversationMessage, ConversationContext
+from .saved_meal_models import SavedMeal, SavedMealNutrition, UserSavedMealFavorite
 
 # 导入所有Pydantic模型
 from . import schemas
@@ -32,6 +33,11 @@ __all__ = [
     "ConversationSession",
     "ConversationMessage",
     "ConversationContext",
+    
+    # 保存菜品模型
+    "SavedMeal",
+    "SavedMealNutrition",
+    "UserSavedMealFavorite",
     
     # Pydantic模型
     "schemas"

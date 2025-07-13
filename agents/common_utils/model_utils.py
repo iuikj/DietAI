@@ -1,5 +1,3 @@
-
-
 import os
 from functools import lru_cache
 
@@ -11,7 +9,7 @@ from langchain_community.chat_models import ChatTongyi
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_qwq import ChatQwQ, ChatQwen
 
-from agent.utils.configuration import *
+from agents.common_utils.configuration import *
 
 
 @lru_cache(maxsize=4)

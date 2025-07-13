@@ -13,7 +13,14 @@
       "Bash(dart analyze:*)",
       "Bash(rg:*)",
       "mcp__context7__resolve-library-id",
-      "WebFetch(domain:langchain-ai.github.io)"
+      "WebFetch(domain:langchain-ai.github.io)",
+      "Bash(rm:*)",
+      "Bash(export FLUTTER_ROOT=/usr/local/flutter)",
+      "Bash(/usr/local/flutter/bin/flutter packages pub run build_runner build --delete-conflicting-outputs)",
+      "Bash(/mnt/d/DevelopFiles/flutter/bin/flutter packages pub run build_runner build --delete-conflicting-outputs)",
+      "Bash(/mnt/d/DevelopFiles/flutter/bin/flutter analyze)",
+      "Bash(export:*)",
+      "Bash(flutter:*)"
     ],
     "deny": []
   },

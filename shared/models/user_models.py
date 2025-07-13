@@ -29,6 +29,7 @@ class User(Base):
     weight_records = relationship("WeightRecord", back_populates="user")
     daily_summaries = relationship("DailyNutritionSummary", back_populates="user")
     conversations = relationship("ConversationSession", back_populates="user")
+    saved_meals = relationship("SavedMeal", back_populates="user")
 
 
 class UserProfile(Base):

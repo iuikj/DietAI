@@ -14,11 +14,19 @@ engine = create_engine(
     settings.database_url,
     pool_pre_ping=True,
     pool_recycle=300,
-    echo=settings.debug  # 开发环境显示SQL
+    pool_size=20,  # 增加连接池大小
+    max_overflow=0,  # 不允许连接池溢出
+    echo=settings.debug,  # 开发环境显示SQL
+    isolation_level="READ_COMMITTED"  # 设置事务隔离级别
 )
 
 # 会话工厂
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal = sessionmaker(
+    autocommit=False, 
+    autoflush=False, 
+    bind=engine,
+    expire_on_commit=False  # 防止会话过期问题
+)
 
 # 基础模型类
 Base = declarative_base()
@@ -32,8 +40,18 @@ def get_db():
     db = SessionLocal()
     try:
         yield db
+    except Exception as e:
+        print(f"数据库会话异常: {str(e)}")
+        try:
+            db.rollback()
+        except Exception as rollback_error:
+            print(f"回滚失败: {str(rollback_error)}")
+        raise e
     finally:
-        db.close()
+        try:
+            db.close()
+        except Exception as close_error:
+            print(f"关闭数据库会话失败: {str(close_error)}")
 
 
 async def get_async_db():

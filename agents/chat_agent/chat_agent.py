@@ -1,8 +1,8 @@
 from langgraph.graph import StateGraph, END
 
-from agent.utils.configuration import Configuration
-from agent.utils.chat_nodes import *
-from agent.utils.chat_states import ChatState, ChatInputState
+from agents.common_utils.configuration import Configuration
+from agents.chat_agent.utils.chat_nodes import *
+from agents.chat_agent.utils.chat_states import ChatState, ChatInputState
 
 # 创建聊天机器人工作流
 chat_workflow = StateGraph(

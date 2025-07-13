@@ -24,7 +24,7 @@ pytest                                  # Run all tests
 pytest tests/test_auth.py              # Run specific test file
 pytest --cov=. --cov-report=html      # Run with coverage report
 
-# LangGraph CLI (for AI agent development)
+# LangGraph CLI (for AI agents development)
 langgraph dev --port 2024             # Start LangGraph development server
 ```
 

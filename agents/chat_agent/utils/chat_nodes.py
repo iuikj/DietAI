@@ -3,10 +3,10 @@ from langchain_core.runnables import RunnableConfig
 from datetime import datetime
 from typing import List, Dict, Optional
 
-from agent.utils.configuration import Configuration
-from agent.utils.chat_states import ChatState
-from agent.common_utils.model_utils import get_model
-from agent.utils.prompts import CHAT_SYSTEM_PROMPTS
+from agents.common_utils.configuration import Configuration
+from agents.chat_agent.utils.chat_states import ChatState
+from agents.common_utils.model_utils import get_model
+from agents.chat_agent.utils.prompts import CHAT_SYSTEM_PROMPTS
 
 
 def initialize_chat_session(state: ChatState, config: RunnableConfig) -> ChatState:
@@ -133,7 +133,7 @@ def format_chat_response(state: ChatState) -> ChatState:
     """格式化聊天回复"""
     try:
         # 构建最终响应数据
-        from agent.utils.sturcts import ChatResponse
+        from agents.utils.sturcts import ChatResponse
         
         chat_response = {
             "success": True,

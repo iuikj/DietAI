@@ -1,4 +1,4 @@
-from agent.utils.sturcts import NutritionAnalysis, AdviceDependencies
+from agents.nutrition_agent.utils.sturcts import NutritionAnalysis, AdviceDependencies
 
 
 def create_nutrition_prompt(image_analysis: str) -> str:
