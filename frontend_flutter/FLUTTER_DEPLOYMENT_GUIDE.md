@@ -9,11 +9,12 @@
 1. [环境准备](#1-环境准备)
 2. [项目配置概览](#2-项目配置概览)
 3. [与默认 Gradle 配置的差异（重点）](#3-与默认-gradle-配置的差异重点)
-4. [后端服务部署](#4-后端服务部署)
-5. [Flutter 应用构建与安装](#5-flutter-应用构建与安装)
-6. [网络配置详解](#6-网络配置详解)
-7. [常见问题与故障排除](#7-常见问题与故障排除)
-8. [配置清单速查表](#8-配置清单速查表)
+4. [全局 Gradle 配置（防重建丢失）](#4-全局-gradle-配置防重建丢失)
+5. [后端服务部署](#5-后端服务部署)
+6. [Flutter 应用构建与安装](#6-flutter-应用构建与安装)
+7. [网络配置详解](#7-网络配置详解)
+8. [常见问题与故障排除](#8-常见问题与故障排除)
+9. [配置清单速查表](#9-配置清单速查表)
 
 ---
 
@@ -329,11 +330,100 @@ flutter.versionCode=1
 
 ---
 
-## 4. 后端服务部署
+## 4. 全局 Gradle 配置（防重建丢失）
+
+> **核心问题：** 如果有人删除 `android/` 目录后运行 `flutter create .` 重建，或 Flutter SDK 升级覆盖了文件，项目级的 Gradle 修改（镜像、代理、JVM 参数）会全部丢失。
+>
+> **解决方案：** 将配置安装到 Gradle 的**全局目录** `~/.gradle/`。全局配置会自动合并到所有项目，不受 `android/` 重建影响。
+
+### 4.1 一键安装（推荐）
+
+项目提供了一键配置脚本，位于 `scripts/setup_gradle.sh`：
+
+```bash
+# 在项目根目录执行
+# 安装镜像 + JVM + 代理（默认端口 7890）
+bash scripts/setup_gradle.sh
+
+# 如果不使用代理
+bash scripts/setup_gradle.sh --no-proxy
+```
+
+脚本会自动完成：
+1. 将**国内 Maven 镜像**安装到 `~/.gradle/init.d/china-mirrors.init.gradle.kts`
+2. 将 **JVM 内存 + 代理配置**写入 `~/.gradle/gradle.properties`
+3. 自动备份已有的全局配置
+
+### 4.2 手动安装
+
+如果不使用脚本，手动操作如下：
+
+#### 步骤 1：安装 Maven 镜像初始化脚本
+
+将 `scripts/gradle/init.gradle.kts` 复制到 `~/.gradle/init.d/` 目录：
+
+```bash
+# 创建目录
+mkdir -p ~/.gradle/init.d
+
+# 复制镜像脚本
+cp scripts/gradle/init.gradle.kts ~/.gradle/init.d/china-mirrors.init.gradle.kts
+```
+
+**原理：** Gradle 在每次构建时会自动执行 `~/.gradle/init.d/` 下所有 `.gradle.kts` 脚本，在所有项目中注入阿里云 + 华为云 Maven 镜像。
+
+#### 步骤 2：安装全局 gradle.properties
+
+将 `scripts/gradle/gradle.properties` 复制到 `~/.gradle/`：
+
+```bash
+cp scripts/gradle/gradle.properties ~/.gradle/gradle.properties
+```
+
+**原理：** `~/.gradle/gradle.properties` 中的属性会与项目级 `android/gradle.properties` **自动合并**。全局配置优先级更低，但当项目级文件缺少某项时会自动补上。
+
+> **修改代理端口：** 编辑 `~/.gradle/gradle.properties`，修改 `systemProp.*.proxyPort` 为你的端口。
+
+### 4.3 配置层级关系
+
+```
+优先级（从高到低）：
+
+┌─ android/gradle.properties     ← 项目级（可能被 Flutter 重建覆盖）
+├─ ~/.gradle/gradle.properties   ← 用户级（永不丢失）✓
+└─ ~/.gradle/init.d/*.gradle.kts ← 全局初始化脚本（永不丢失）✓
+```
+
+| 配置项 | 项目级 `android/` | 全局级 `~/.gradle/` | 重建后是否保留 |
+|--------|-------------------|---------------------|---------------|
+| Maven 镜像仓库 | `build.gradle.kts` | `init.d/china-mirrors.init.gradle.kts` | 全局级保留 |
+| JVM 内存参数 | `gradle.properties` | `gradle.properties` | 全局级保留 |
+| 代理配置 | `gradle.properties` | `gradle.properties` | 全局级保留 |
+| NDK 版本 | `app/build.gradle.kts` | 无法全局化 | **需手动恢复** |
+| AGP/Kotlin 版本 | `settings.gradle.kts` | 无法全局化 | **需手动恢复** |
+
+> **注意：** NDK 版本和 AGP/Kotlin 插件版本是项目特定的，无法放到全局配置。如果重建了 `android/`，只需要在 `app/build.gradle.kts` 中补回 `ndkVersion = "27.0.12077973"`，以及在 `settings.gradle.kts` 中将 AGP 改为 `8.7.3`、Kotlin 改为 `2.1.0`。
+
+### 4.4 团队新成员操作流程
+
+```
+1. git clone <repo>
+2. cd DietAI
+3. bash scripts/setup_gradle.sh        ← 一键安装全局 Gradle 配置
+4. cd frontend_flutter
+5. 修改 local.properties 中的 SDK 路径
+6. 修改 api_config.dart 中的 IP 地址
+7. flutter pub get
+8. flutter run
+```
+
+---
+
+## 5. 后端服务部署
 
 Flutter 应用需要连接后端 API 才能正常工作。以下是后端启动步骤。
 
-### 4.1 使用 Docker（推荐）
+### 5.1 使用 Docker（推荐）
 
 ```bash
 # 在项目根目录执行
@@ -352,14 +442,14 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 langgraph dev --port 2024
 ```
 
-### 4.2 手动部署数据服务
+### 5.2 手动部署数据服务
 
 如果不使用 Docker，需分别安装并配置：
 - PostgreSQL 15+（创建数据库 `dietai_db`）
 - Redis 7+（设置密码 `2168`）
 - MinIO（默认用户名密码 `minioadmin/minioadmin`）
 
-### 4.3 环境变量配置
+### 5.3 环境变量配置
 
 复制 `env.example` 为 `.env`，填入 API 密钥：
 
@@ -375,9 +465,9 @@ REDIS_PASSWORD=2168           # Redis 密码
 
 ---
 
-## 5. Flutter 应用构建与安装
+## 6. Flutter 应用构建与安装
 
-### 5.1 修改 API 地址（关键步骤）
+### 6.1 修改 API 地址（关键步骤）
 
 编辑 `lib/core/constants/api_config.dart`，将 IP 地址改为你电脑的局域网 IP：
 
@@ -406,7 +496,7 @@ ip addr show | grep "inet "
 > **为什么需要改 IP？**
 > 手机通过 USB 或 WiFi 连接时，`localhost` 指的是手机本身，而不是你的电脑。必须使用电脑的局域网 IP 才能让手机访问电脑上运行的后端服务。
 
-### 5.2 安装依赖
+### 6.2 安装依赖
 
 ```bash
 cd frontend_flutter
@@ -418,7 +508,7 @@ flutter pub get
 flutter packages pub run build_runner build --delete-conflicting-outputs
 ```
 
-### 5.3 Debug 模式安装到手机
+### 6.3 Debug 模式安装到手机
 
 ```bash
 # 确认手机已连接
@@ -430,7 +520,7 @@ flutter run
 flutter run -d <device_id>
 ```
 
-### 5.4 Release 模式构建 APK
+### 6.4 Release 模式构建 APK
 
 ```bash
 # 构建 release APK
@@ -447,7 +537,7 @@ flutter build apk --split-per-abi
 # app-x86_64-release.apk        (x86 模拟器)
 ```
 
-### 5.5 直接安装 APK 到手机
+### 6.5 直接安装 APK 到手机
 
 ```bash
 # 通过 adb 安装
@@ -459,9 +549,9 @@ adb install -r build/app/outputs/flutter-apk/app-release.apk
 
 ---
 
-## 6. 网络配置详解
+## 7. 网络配置详解
 
-### 6.1 Gradle 依赖下载（构建时）
+### 7.1 Gradle 依赖下载（构建时）
 
 构建时 Gradle 需要从以下仓库下载 Android 编译工具和依赖库：
 
@@ -482,7 +572,7 @@ Gradle Distribution (services.gradle.org)  → 需代理或手动下载
 
 > **推荐方案 B**，因为阿里云 + 华为云镜像已经覆盖了绝大多数依赖。只有极少数新发布的包可能需要直连 Google。
 
-### 6.2 Gradle Distribution 下载
+### 7.2 Gradle Distribution 下载
 
 首次构建时 Gradle Wrapper 会下载 `gradle-8.12-all.zip`（约 250MB）。如果下载缓慢：
 
@@ -505,7 +595,7 @@ Gradle Distribution (services.gradle.org)  → 需代理或手动下载
 distributionUrl=https\://mirrors.cloud.tencent.com/gradle/gradle-8.12-all.zip
 ```
 
-### 6.3 Flutter App 运行时网络（运行时）
+### 7.3 Flutter App 运行时网络（运行时）
 
 应用运行时的网络请求流向：
 
@@ -527,7 +617,7 @@ netsh advfirewall firewall add rule name="DietAI-Backend" dir=in action=allow pr
 netsh advfirewall firewall add rule name="DietAI-MinIO" dir=in action=allow protocol=TCP localport=9000
 ```
 
-### 6.4 Android 明文 HTTP 流量
+### 7.4 Android 明文 HTTP 流量
 
 Android 9 (API 28) 及以上版本默认禁止明文 HTTP 流量。本项目在 debug 和 profile 模式下通过 `AndroidManifest.xml` 已声明 `INTERNET` 权限，但**未配置 `network_security_config.xml`**。
 
@@ -558,9 +648,9 @@ Android 9 (API 28) 及以上版本默认禁止明文 HTTP 流量。本项目在 
 
 ---
 
-## 7. 常见问题与故障排除
+## 8. 常见问题与故障排除
 
-### 7.1 Gradle 构建失败
+### 8.1 Gradle 构建失败
 
 #### 问题：`Could not resolve all files for configuration`
 
@@ -618,7 +708,7 @@ sdkmanager "ndk;27.0.12077973"
 
 ---
 
-### 7.2 网络请求失败
+### 8.2 网络请求失败
 
 #### 问题：手机连不上后端 API
 
@@ -652,7 +742,7 @@ sdkmanager "ndk;27.0.12077973"
 
 ---
 
-### 7.3 构建环境问题
+### 8.3 构建环境问题
 
 #### 问题：`flutter pub get` 缓慢
 
@@ -687,7 +777,7 @@ export FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn
 
 ---
 
-### 7.4 设备相关问题
+### 8.4 设备相关问题
 
 #### 问题：`flutter run` 提示 "No connected devices"
 
@@ -717,7 +807,7 @@ export FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn
 
 ---
 
-## 8. 配置清单速查表
+## 9. 配置清单速查表
 
 新开发者克隆项目后，按以下清单逐项配置：
 
@@ -728,13 +818,14 @@ export FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn
 - [ ] 安装 NDK 27.0.12077973
 - [ ] 安装 JDK 11
 - [ ] `flutter doctor` 全部通过
+- [ ] **运行 `bash scripts/setup_gradle.sh`** 安装全局 Gradle 配置（镜像 + JVM + 代理）
 
 ### 文件修改清单
 
 - [ ] **`android/local.properties`** — 修改 `sdk.dir` 和 `flutter.sdk` 为你的本地路径
-- [ ] **`android/gradle.properties`** — 确认代理配置（`systemProp.*` 6 行），默认 `7890`（Clash），如使用其他代理软件需修改端口
 - [ ] **`lib/core/constants/api_config.dart`** — 修改 `devLocalNetworkUrl` 和 `devLocalNetworkMinioUrl` 为你的电脑 IP
 - [ ] **系统环境变量** — 设置 `PUB_HOSTED_URL` 和 `FLUTTER_STORAGE_BASE_URL`（国内镜像）
+- [ ] （可选）**`~/.gradle/gradle.properties`** — 如代理端口非 7890，编辑修改
 
 ### 后端服务清单
 
