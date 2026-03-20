@@ -23,6 +23,8 @@ from shared.config.minio_config import minio_client
 from shared.config.settings import get_settings
 from fastapi.responses import StreamingResponse
 
+from shared.utils.model import decimal_to_float
+
 settings = get_settings()
 
 router = APIRouter(prefix="/foods", tags=["食物记录"])
@@ -145,7 +147,7 @@ async def create_food_record(
                         except Exception as commit_error:
                             print(f"更新分析状态失败: {str(commit_error)}")
                             db.rollback()
-                    
+
                     yield f"data: {json.dumps({'type': 'analysis_failed', 'data': {'status': 'failed', 'message': f'分析失败: {str(e)}'}, 'success': False}, ensure_ascii=False)}\n\n"
 
             # 清除相关缓存
@@ -164,7 +166,7 @@ async def create_food_record(
                 db.rollback()
             except Exception as rollback_error:
                 print(f"回滚事务失败: {str(rollback_error)}")
-            
+
             yield f"data: {json.dumps({'type': 'error', 'data': {'error': str(e), 'message': f'创建食物记录失败: {str(e)}'}, 'success': False}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(
@@ -177,7 +179,6 @@ async def create_food_record(
             "Access-Control-Allow-Headers": "*",
         }
     )
-
 
 
 @router.post("/records/confirm/{record_id}", response_model=BaseResponse)
@@ -193,7 +194,7 @@ async def confirm_food_record(
             db.rollback()  # 清理任何未完成的事务
         except Exception:
             pass  # 忽略回滚错误
-        
+
         # 验证记录是否存在且属于当前用户
         record = db.query(FoodRecord).filter(
             FoodRecord.id == record_id,
@@ -265,7 +266,7 @@ async def confirm_food_record(
         )
 
 
-async def analyze_food_image_with_agent(image_url: str, current_user: User,db: Session):
+async def analyze_food_image_with_agent(image_url: str, current_user: User, db: Session):
     """使用Langgraph Agent分析食物图片（流式输出）"""
 
     try:
@@ -396,7 +397,7 @@ async def get_user_preferences(db: Session, user_id: int):
             db.rollback()
         except Exception as rollback_error:
             print(f"回滚事务失败: {str(rollback_error)}")
-        
+
         # 返回一个默认偏好，防止后续逻辑出错
         return {
             "dietary_restrictions": [],
@@ -481,7 +482,7 @@ async def create_nutrition_detail_from_analysis(food_record_id: int, nutrition_f
             calcium=nutrition_facts.vitamins_minerals.calcium or 0,
             iron=nutrition_facts.vitamins_minerals.iron or 0,
             potassium=nutrition_facts.vitamins_minerals.potassium or 0,
-            
+
             analysis_method="agent_analysis"
         )
 
@@ -507,9 +508,10 @@ async def get_food_records(
         page_size: int = Query(20, ge=1, le=100, description="每页大小")
 ):
     """获取食物记录列表"""
+    #TODO:修改食物记录的查询
     try:
         query = db.query(FoodRecord).filter(current_user.id == FoodRecord.user_id)
-
+        query.filter()
         if start_date:
             query = query.filter(FoodRecord.record_date >= start_date)
         if end_date:
@@ -527,7 +529,42 @@ async def get_food_records(
 
         records_data = []
         for record in records:
+            nutrition_query = db.query(NutritionDetail).filter(NutritionDetail.food_record_id == record.id)
+            nutrition = nutrition_query.first()
+            nutrition_data={}
+            print(f"相关的营养信息：{nutrition.id}")
+            if nutrition:
+                nutrition_data = {
+                    # 宏量营养素
+                    "calories": nutrition.calories,
+                    "protein": nutrition.protein,
+                    "fat": nutrition.fat,
+                    "carbohydrates": nutrition.carbohydrates,
+                    "dietary_fiber": nutrition.dietary_fiber,
+                    "sugar": nutrition.sugar,
+
+                    # 微量营养素
+                    "sodium": nutrition.sodium,
+                    "cholesterol": nutrition.cholesterol,
+
+                    # 维生素
+                    "vitamin_a": nutrition.vitamin_a,
+                    "vitamin_c": nutrition.vitamin_c,
+                    "vitamin_d": nutrition.vitamin_d,
+
+                    # 矿物质
+                    "calcium": nutrition.calcium,
+                    "iron": nutrition.iron,
+                    "potassium": nutrition.potassium,
+
+                    # 其他
+                    "confidence_score":
+                        nutrition.confidence_score if nutrition.confidence_score is not None else None,
+                }
+                nutrition_data = decimal_to_float(nutrition_data)
+                print(f"相关营养信息：{nutrition_data}")
             records_data.append({
+                "nutrition_data": nutrition_data,
                 "id": record.id,
                 "user_id": record.user_id,
                 "record_date": record.record_date.isoformat(),
@@ -777,7 +814,7 @@ async def get_daily_nutrition_summary(
             "meal_count": summary.meal_count,
             "water_intake": float(summary.water_intake),
             "exercise_calories": float(summary.exercise_calories),
-            "health_score": float(summary.health_score) if summary.health_score else None,
+            "health_score": float(summary.health_level) if summary.health_level else None,
             "created_at": summary.created_at.isoformat(),
             "updated_at": summary.updated_at.isoformat()
         }
@@ -979,6 +1016,102 @@ async def get_image_url(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"获取图片URL失败: {str(e)}"
+        )
+
+
+@router.get("/images/data/{record_id}", response_model=BaseResponse)
+async def get_food_image_data(
+        record_id: int,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db)
+):
+    """获取食物记录的图片数据"""
+    try:
+        # 获取食物记录
+        food_record = db.query(FoodRecord).filter(
+            FoodRecord.id == record_id,
+            FoodRecord.user_id == current_user.id
+        ).first()
+
+        if not food_record:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="食物记录不存在"
+            )
+
+        if not food_record.image_url:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="该记录没有图片"
+            )
+
+        # 从image_url中提取object_name
+        # image_url格式通常是: http://localhost:9000/bucket-name/food_images/user_id/filename
+        # 我们需要提取: food_images/user_id/filename 部分
+        image_url = food_record.image_url
+
+        # 解析URL获取object_name
+        if "food_images/" in image_url:
+            object_name = image_url.split("food_images/")[1]
+            object_name = f"food_images/{object_name}"
+        else:
+            # 如果URL格式不标准，尝试从完整URL中提取
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="图片URL格式不正确"
+            )
+
+        # 验证对象名格式（确保是该用户的图片）
+        if not object_name.startswith(f"food_images/{current_user.id}/"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="无权访问该图片"
+            )
+
+        # 检查文件是否存在
+        if not minio_client.file_exists(object_name):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="图片文件不存在"
+            )
+
+        # 获取文件信息
+        file_info = minio_client.get_file_info(object_name)
+        if not file_info:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="获取图片信息失败"
+            )
+
+        # 下载图片数据
+        image_data = minio_client.download_file(object_name)
+        if not image_data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="下载图片失败"
+            )
+
+        # 将图片数据编码为base64
+        import base64
+        image_base64 = base64.b64encode(image_data).decode('utf-8')
+
+        return BaseResponse(
+            success=True,
+            message="获取图片数据成功",
+            data={
+                "record_id": record_id,
+                "image_base64": image_base64,
+                "content_type": file_info.get("content_type", "image/jpeg"),
+                "file_size": file_info.get("size", 0),
+                "object_name": object_name
+            }
+        )
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取图片数据失败: {str(e)}"
         )
 
 

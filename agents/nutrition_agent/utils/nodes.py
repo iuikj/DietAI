@@ -95,6 +95,7 @@ def analyze_image(state: AgentState) -> AgentState:
         ]
 
         response = state['vision_model'].invoke(messages)
+        # print(f"分析结果：{response.content}")
         state["image_analysis"] = response.content
         state["current_step"] = "image_analyzed"
         print(state["current_step"])
@@ -144,6 +145,7 @@ def extract_nutrition_info(state: AgentState) -> AgentState:
         )
 
         nutrition_analysis = structured_model.invoke(prompt)
+        print(f"分析结果：{nutrition_analysis}")
         state["nutrition_analysis"] = nutrition_analysis
         state["current_step"] = "nutrition_extracted"
         print(state["current_step"])
